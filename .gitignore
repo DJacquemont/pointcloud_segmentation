@@ -16,3 +16,11 @@ install/
 
 # code editor
 .vscode/
+
+# webots
+.*.cache
+.*.wbproj
+.*.jpg
+
+# python
+__pycache__/

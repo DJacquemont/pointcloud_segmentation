@@ -1,0 +1,3 @@
+[submodule "libraries/hough-3d-lines"]
+	path = libraries/hough-3d-lines
+	url = git@github.com:LucasWaelti/hough-3d-lines.git
