@@ -1,0 +1,18 @@
+# Files without extensions
+*
+!/**/
+!*.*
+!Makefile
+!makefile
+
+# CMake
+CMakeCache.txt
+cmake_install.cmake
+
+# ROS 
+build/
+devel/
+install/
+
+# code editor
+.vscode/
