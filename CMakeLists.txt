@@ -150,6 +150,11 @@ include_directories(
 #   ${catkin_LIBRARIES}
 # )
 
+add_executable(${PROJECT_NAME}_node src/pointcloud_segmentation_node.cpp)
+target_link_libraries(${PROJECT_NAME}_node
+  ${catkin_LIBRARIES}
+)
+
 #############
 ## Install ##
 #############
