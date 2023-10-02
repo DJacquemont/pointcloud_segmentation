@@ -2,10 +2,11 @@ cmake_minimum_required(VERSION 3.0.2)
 project(pointcloud_segmentation)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
-add_compile_options(-std=c++11)
+add_compile_options(-std=c++14)
 
-INCLUDE_DIRECTORIES ( "usr/include/eigen3" )
-INCLUDE_DIRECTORIES ( "libraries/hough-3d-lines" )
+SET(Eigen3_DIR "/usr/lib/cmake/eigen3/")
+SET(PCL_DIR "/usr/lib/x86_64-linux-gnu/cmake/pcl/")
+INCLUDE_DIRECTORIES ( "/home/djacquem/WS/src/libraries/hough-3d-lines" )
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -16,6 +17,7 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   sensor_msgs
   Eigen3 REQUIRED
+  PCL REQUIRED
 )
 
 ## System dependencies are found with CMake's conventions

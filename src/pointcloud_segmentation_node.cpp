@@ -1,6 +1,7 @@
 #include <ros/ros.h>
 #include "std_msgs/String.h"
 #include <sensor_msgs/PointCloud2.h>
+#include <pcl_conversions/pcl_conversions.h>
 
 #include <sstream>
 #include <cstdlib>
@@ -17,6 +18,10 @@
 void pointcloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg)
 {
   ROS_INFO("Pointcloud Received");
+
+  pcl::PointCloud<pcl::PointXYZ> pcl_cloud;
+
+  pcl::fromROSMsg(*msg, pcl_cloud);
 }
 
 // Main function
