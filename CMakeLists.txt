@@ -157,7 +157,7 @@ include_directories(
 #   ${catkin_LIBRARIES}
 # )
 
-add_executable(${PROJECT_NAME}_node src/pointcloud_segmentation_node.cpp)
+add_executable(${PROJECT_NAME}_node src/pointcloud_segmentation_node.cpp libraries/hough-3d-lines/vector3d.cpp libraries/hough-3d-lines/pointcloud.cpp libraries/hough-3d-lines/hough.cpp libraries/hough-3d-lines/sphere.cpp )
 target_link_libraries(${PROJECT_NAME}_node
   ${catkin_LIBRARIES}
 )
