@@ -2,31 +2,122 @@
 #include "std_msgs/String.h"
 #include <sensor_msgs/PointCloud2.h>
 #include <pcl_conversions/pcl_conversions.h>
+#include <visualization_msgs/Marker.h>
 
 #include "vector3d.h"
 #include "pointcloud.h"
 #include "hough.h"
 
-#include <sstream>
-#include <cstdlib>
-#include <stdio.h>
-#include <string.h>
-#include <math.h>
 #include <eigen3/Eigen/Dense>
-#include <iostream>
+
 
 using Eigen::MatrixXf;
+
+
+// Utility functions prototype
+int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc);
+double orthogonal_LSQ(const PointCloud &pc, Vector3d* a, Vector3d* b);
+
+
+// Class caring for the node's communication (Subscription & Publication)
+class SubscribeAndPublish
+{
+  public:
+  // Class initialisation
+  SubscribeAndPublish()
+  {
+    tof_pc_sub = node.subscribe("/tof_pc", 1000, &SubscribeAndPublish::pointcloudCallback, this);
+    marker_pub = node.advertise<visualization_msgs::Marker>("visualization_marker", 10);
+  }
+
+  // Callback function receiving ToF images from the Autopilot package
+  // and publishing marker lines to vizualise the computed lines in rviz
+  void pointcloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg);
+
+  private:
+  ros::NodeHandle node;
+  ros::Subscriber tof_pc_sub;
+  ros::Publisher marker_pub;
+};
+
+
+
+//--------------------------------------------------------------------
+// Main function
+//--------------------------------------------------------------------
+
+int main(int argc, char* argv[]){
+
+  ROS_INFO("Pointcloud semgmentation node starting");
+
+  ros::init(argc, argv, "pointcloud_seg");
+
+  SubscribeAndPublish SAPobject;
+
+  ros::spin();
+
+  return 0;
+}
+
+
+//--------------------------------------------------------------------
+// Callback functions
+//--------------------------------------------------------------------
+
+// Callback function receiving ToF images from the Autopilot package
+// and publishing marker lines to vizualise the computed lines in rviz
+void SubscribeAndPublish::pointcloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg)
+  {
+    pcl::PointCloud<pcl::PointXYZ> pcl_cloud;
+    pcl::fromROSMsg(*msg, pcl_cloud);
+
+    ROS_INFO("Pointcloud Received : w %d, h %d, is_dense %d", 
+                    pcl_cloud.width, pcl_cloud.height, pcl_cloud.is_dense);
+
+    if (hough3dlines(pcl_cloud)){
+      ROS_INFO("ERROR - Unable to perform the Hough transform");
+    }
+
+    // Creating visualisation markers
+    visualization_msgs::Marker line_list;
+    line_list.header.frame_id = "world";
+    line_list.header.stamp = ros::Time::now();
+    line_list.ns = "points_and_lines";
+    line_list.action = visualization_msgs::Marker::ADD;
+    line_list.pose.orientation.w = 1.0;
+    line_list.type = visualization_msgs::Marker::LINE_LIST;
+    line_list.scale.x = 0.1;
+    line_list.scale.y = 0.1;
+    line_list.color.r = 1.0;
+    line_list.color.a = 1.0;
+
+    // Test: displaying 3 lines in rviz
+    for (uint32_t i = 0; i < 3; ++i)
+    {
+      geometry_msgs::Point p;
+      p.x = 0;
+      p.y = i;
+      p.z = 1;
+
+      line_list.points.push_back(p);
+      p.z += 1.0;
+      line_list.points.push_back(p);
+    }
+
+    marker_pub.publish(line_list);
+  }
+
+
+
 
 
 //--------------------------------------------------------------------
 // utility functions
 //--------------------------------------------------------------------
 
-//
 // orthogonal least squares fit with libeigen
-// rc = largest eigenvalue
-//
 double orthogonal_LSQ(const PointCloud &pc, Vector3d* a, Vector3d* b){
+  // rc = largest eigenvalue
   double rc = 0.0;
 
   // anchor point is mean value
@@ -177,51 +268,10 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc){
     X.removePoints(Y);
 
   } while ((X.points.size() > 1) && 
-           ((opt_nlines == 0) || (opt_nlines > nlines)));
+           ((opt_nlines == 0) || (opt_nlines > nlines)) && ros::ok());
 
   // clean up
   delete hough;
 
   return 0;
-}
-
-
-
-//--------------------------------------------------------------------
-// Callback functions
-//--------------------------------------------------------------------
-
-// Callback function receiving ToF images from the Autopilot package
-void pointcloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg)
-{
-  pcl::PointCloud<pcl::PointXYZ> pcl_cloud;
-  pcl::fromROSMsg(*msg, pcl_cloud);
-
-  ROS_INFO("Pointcloud Received : w %d, h %d, is_dense %d", 
-                  pcl_cloud.width, pcl_cloud.height, pcl_cloud.is_dense);
-  
-  if (hough3dlines(pcl_cloud)){
-    ROS_INFO("ERROR - Unable to perform the Hough transform");
-  }
-}
-
-
-
-//--------------------------------------------------------------------
-// Main function
-//--------------------------------------------------------------------
-
-int main(int argc, char* argv[]){
-
-    ROS_INFO("Pointcloud semgmentation node starting");
-
-    ros::init(argc, argv, "pointcloud_seg");
-
-    ros::NodeHandle n;
-
-    ros::Subscriber tof_pc_sub = n.subscribe("tof_pc", 1000, pointcloudCallback);
-
-    ros::spin();
-
-    return 0;
 }

@@ -4,9 +4,9 @@ project(pointcloud_segmentation)
 ## Compile as C++11, supported in ROS Kinetic and newer
 add_compile_options(-std=c++14)
 
-SET(Eigen3_DIR "/usr/lib/cmake/eigen3/")
+SET(Eigen3_DIR "/usr/lib/cmake/eigen3/") # or include /usr/include/eigen3/
 SET(PCL_DIR "/usr/lib/x86_64-linux-gnu/cmake/pcl/")
-INCLUDE_DIRECTORIES ( "/home/djacquem/WS/src/libraries/hough-3d-lines" )
+INCLUDE_DIRECTORIES ( "/home/djacquem/WS/src/pointcloud_segmentation/libraries/hough-3d-lines" )
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -14,8 +14,11 @@ INCLUDE_DIRECTORIES ( "/home/djacquem/WS/src/libraries/hough-3d-lines" )
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
+  tf
   std_msgs
   sensor_msgs
+  geometry_msgs
+  visualization_msgs
   Eigen3 REQUIRED
   PCL REQUIRED
 )
@@ -157,8 +160,13 @@ include_directories(
 #   ${catkin_LIBRARIES}
 # )
 
-add_executable(${PROJECT_NAME}_node src/pointcloud_segmentation_node.cpp libraries/hough-3d-lines/vector3d.cpp libraries/hough-3d-lines/pointcloud.cpp libraries/hough-3d-lines/hough.cpp libraries/hough-3d-lines/sphere.cpp )
+add_executable(${PROJECT_NAME}_node /home/djacquem/WS/src/pointcloud_segmentation/src/pointcloud_segmentation_node.cpp /home/djacquem/WS/src/pointcloud_segmentation/libraries/hough-3d-lines/vector3d.cpp /home/djacquem/WS/src/pointcloud_segmentation/libraries/hough-3d-lines/pointcloud.cpp /home/djacquem/WS/src/pointcloud_segmentation/libraries/hough-3d-lines/hough.cpp /home/djacquem/WS/src/pointcloud_segmentation/libraries/hough-3d-lines/sphere.cpp )
 target_link_libraries(${PROJECT_NAME}_node
+  ${catkin_LIBRARIES}
+)
+
+add_executable(pointcloud_tfbr_node /home/djacquem/WS/src/pointcloud_segmentation/src/pointcloud_tfbr.cpp)
+target_link_libraries(pointcloud_tfbr_node
   ${catkin_LIBRARIES}
 )
 

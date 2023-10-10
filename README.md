@@ -12,3 +12,14 @@ To update the submodules (typically after cloning this repo), run the command:
 ```bash
 git submodule update --init --recursive
 ```
+
+## Getting started
+
+To launch the package and the AutoPilot package use
+```roslaunch pointcloud_segmentation seg_pkg.launch```
+
+To run only the segmentation node use 
+```rosrun pointcloud_segmentation pointcloud_segmentation_node```
+
+To run only the pointcloud TF transform broadcaster use
+```rosrun pointcloud_segmentation pointcloud_tfbr_node```

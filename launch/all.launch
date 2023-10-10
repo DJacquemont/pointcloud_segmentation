@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+
+<launch>
+
+    <arg name="trajectory"  default="eight" />      <!-- Trajectory to follow -->
+    <arg name="imu_id"      default="1" />      <!-- IMU id to use -->
+    <arg name="rviz_AP_pkg" default="false" /> <!-- Launch rviz in the Auto Pilot package -->
+    <arg name="rviz" default="true" /> <!-- Launch rviz -->
+
+    <rosparam param="/use_sim_time"> true </rosparam> <!-- Use simulation time, the drone_controller_node will publish the /clock topic -->
+
+    <!-- =============================================================================== -->
+
+    <!-- Including & starting Autopilot launchfile with correct parameters-->
+    <include file="$(find auto_pilot_pkg)/launch/all.launch">
+        <arg name="trajectory" value="$(arg trajectory)"/>
+        <arg name="imu_id"     value="$(arg imu_id)"/>
+        <arg name="rviz"     value="$(arg rviz_AP_pkg)"/>
+    </include>
+
+    <!-- Pointcloud segmentation node, responsible for processing tof pointclouds -->
+    <node pkg="pointcloud_segmentation" type="pointcloud_segmentation_node" name="pointcloud_seg" output="screen" />
+
+    <!-- Pointcloud TF broadcaster node, responsible for broadcasting the TF transform of the pointcloud -->
+    <node pkg="pointcloud_segmentation" type="pointcloud_tfbr_node" name="pointcloud_tfbr" output="screen" />
+
+    <!-- Visualization -->
+    <node if="$(arg rviz)" pkg="rviz" type="rviz" name="rviz" args="-d $(find pointcloud_segmentation)/rviz/drone_pc.rviz" />
+
+</launch>
