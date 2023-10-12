@@ -1,0 +1,106 @@
+#VRML_SIM R2023b utf8
+
+EXTERNPROTO "../protos/voxl_m500.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023a/projects/objects/floors/protos/Floor.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023a/projects/appearances/protos/Parquetry.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023a/projects/appearances/protos/PaintedWood.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023a/projects/appearances/protos/Fabric.proto"
+EXTERNPROTO "../protos/starling.proto"
+
+WorldInfo {
+  basicTimeStep 8
+}
+Viewpoint {
+  orientation -0.09982109870448425 -0.032309415665488395 0.9944806935847395 3.7039615420147314
+  position 8.549777759495742 4.9159770662921645 3.639150860088503
+}
+Floor {
+  rotation 0 0 1 1.5707963267948966
+  size 6 6
+  appearance Parquetry {
+    type "light strip"
+  }
+}
+DEF CEILING Solid {
+  translation 0 0 4
+  rotation 0 -1 0 3.141592653589793
+  children [
+    Shape {
+      appearance PaintedWood {
+        colorOverride 0.560784 0.34902 0.00784314
+      }
+      geometry Plane {
+        size 6 6
+      }
+    }
+    PointLight {
+      attenuation 0 0 1
+      intensity 9
+      location -1.5 -1.5 0.3
+      castShadows TRUE
+    }
+    PointLight {
+      attenuation 0 0 1
+      intensity 9
+      location 1.5 1.5 0.3
+    }
+  ]
+}
+DEF WALL1 Solid {
+  translation 0 3 2
+  rotation 0 -0.70710578118615 0.707107781185531 3.14159
+  children [
+    DEF WALL_SHAPE Shape {
+      appearance Fabric {
+        colorOverride 0.533333 0.541176 0.521569
+        textureTransform TextureTransform {
+          scale 5 1
+        }
+      }
+      geometry Plane {
+        size 6 4
+      }
+    }
+  ]
+  name "wall1"
+  boundingObject USE WALL_SHAPE
+}
+DEF WALL2 Solid {
+  translation 3 0 2
+  rotation -0.57735126918836 -0.5773482691869612 0.57735126918836 2.094395307179586
+  children [
+    USE WALL_SHAPE
+  ]
+  name "wall2"
+  boundingObject USE WALL_SHAPE
+}
+DEF WALL3 Solid {
+  translation 0 -3 2
+  rotation 1 0 0 -1.5707953071795862
+  children [
+    USE WALL_SHAPE
+  ]
+  name "wall3"
+  boundingObject USE WALL_SHAPE
+}
+DEF WALL4 Solid {
+  translation -3 0 2
+  rotation 0.577349935856137 -0.5773509358560258 0.577349935856137 -2.094395307179586
+  children [
+    USE WALL_SHAPE
+  ]
+  name "wall2(2)"
+  boundingObject USE WALL_SHAPE
+}
+voxl_m500 {
+  translation -0.21 -0.7 0.01486560299999986
+  rotation -7.322704088551495e-18 -3.2319615972564333e-19 1 0.523599
+  controller "<none>"
+}
+starling {
+  hidden linearVelocity_0 0.7913806260009031 -0.3315891831797427 0.12146626889387453
+  hidden angularVelocity_0 -0.0115091269986528 -0.00893493747136355 -0.18704682051133537
+  translation -1.0632842130985165 0.7221614376793294 1.8453233198438919
+  rotation 0.08501426512376495 0.07254394840926912 -0.9937353522314981 0.7486026183559755
+  controller "<extern>"
+}

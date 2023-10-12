@@ -16,7 +16,7 @@ git submodule update --init --recursive
 ## Getting started
 
 To launch the package and the AutoPilot package use
-```roslaunch pointcloud_segmentation seg_pkg.launch```
+```roslaunch pointcloud_segmentation all.launch```
 
 To run only the segmentation node use 
 ```rosrun pointcloud_segmentation pointcloud_segmentation_node```

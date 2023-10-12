@@ -1,0 +1,105 @@
+#VRML_SIM R2023b utf8
+
+EXTERNPROTO "../protos/voxl_m500.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023a/projects/objects/floors/protos/Floor.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023a/projects/appearances/protos/Parquetry.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023a/projects/appearances/protos/PaintedWood.proto"
+EXTERNPROTO "../protos/starling.proto"
+
+WorldInfo {
+  basicTimeStep 8
+}
+Viewpoint {
+  orientation 0.258835537000728 0.019375685910123213 -0.9657270564611189 3.058412985698887
+  position 10.753626374767574 2.0698700311298333 6.792480820930482
+}
+Background {
+  skyColor [
+    0.533333 0.541176 0.521569
+  ]
+}
+Floor {
+  rotation 0 0 1 1.5707963267948966
+  size 6 6
+  appearance Parquetry {
+    type "light strip"
+  }
+}
+DEF CEILING Solid {
+  translation 0 0 4
+  rotation 0 -1 0 3.141592653589793
+  children [
+    Shape {
+      appearance PaintedWood {
+        colorOverride 0.560784 0.34902 0.00784314
+      }
+      geometry Plane {
+        size 6 6
+      }
+    }
+    PointLight {
+      attenuation 0 0 1
+      intensity 9
+      location -1.5 -1.5 0.3
+      castShadows TRUE
+    }
+    PointLight {
+      attenuation 0 0 1
+      intensity 9
+      location 1.5 1.5 0.3
+    }
+  ]
+}
+voxl_m500 {
+  translation -0.21 -0.7 0.01486560299999986
+  rotation -7.322704088551495e-18 -3.2319615972564333e-19 1 0.523599
+  controller "<none>"
+}
+starling {
+  translation -1.11037 0.857915 0.0911804
+  rotation 0.08501426512376495 0.07254394840926912 -0.9937353522314981 0.7486026183559755
+  controller "<extern>"
+}
+Solid {
+  translation 1.50989 0.703409 1
+  rotation 0.6947517066745018 -0.6947417066787238 0.18615592140461423 0.736198
+  children [
+    DEF SHAPE_CYL Shape {
+      appearance PBRAppearance {
+        metalness 0
+      }
+      geometry Cylinder {
+        radius 0.1
+      }
+    }
+  ]
+  name "solid(1)"
+  boundingObject USE SHAPE_CYL
+}
+Solid {
+  translation -0.670182 1.6939 1
+  rotation 0.6947491893632964 0.6947441893619337 0.18615605073935165 -0.7361953071795861
+  children [
+    USE SHAPE_CYL
+  ]
+  name "solid(2)"
+  boundingObject USE SHAPE_CYL
+}
+Solid {
+  translation 1.5 1 1
+  rotation 0.6947491893632964 0.6947441893619337 0.18615605073935165 -0.7361953071795861
+  children [
+    USE SHAPE_CYL
+  ]
+  name "solid(3)"
+  boundingObject USE SHAPE_CYL
+}
+Solid {
+  translation -0.516839 0.494453 1
+  rotation 0.6947491893632964 0.6947441893619337 0.18615605073935165 -0.7361953071795861
+  children [
+    USE SHAPE_CYL
+  ]
+  name "solid(4)"
+  boundingObject USE SHAPE_CYL
+}

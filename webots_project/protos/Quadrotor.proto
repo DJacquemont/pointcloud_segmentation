@@ -1,0 +1,571 @@
+#VRML_SIM R2023a utf8
+# Quadrotor proto
+#  Source: https://disalgitn.epfl.ch/kagan.erunsal/webots_simulator/-/blob/master/protos/Quadrotor.proto
+#  > Note the file was slightly modified.
+PROTO Quadrotor [
+  field SFVec3f    translation 0 0 0
+  field SFRotation rotation  0 1 0 0
+  field SFString   controller "default"
+#  field SFString   controllerArgs ""
+  field SFString   name "quadrotor"
+  field SFFloat 	 mass 1.37
+  field MFVec3f    inertiaMatrix [0.012262 0.013648 0.010735 0.0 0.0 0.0]
+  field SFFloat 	 max_prop_vel 35000
+  field SFVec2f  	 MotorThrust_p 9.8036e-08 0
+  field SFVec2f  	 MotorThrust_n -9.8036e-08 0
+  field SFVec2f  	 MotorTorque 1.5079e-09 0
+  field MFNode     extensions []
+]
+{
+Robot {
+  translation IS translation
+  rotation IS rotation
+  children [
+    Group {
+      children IS extensions
+    }
+    GPS {
+    }
+    Gyro {
+    }
+    InertialUnit {
+      name "inertial_unit"
+    }
+    Transform {
+      rotation 0 1 0 0
+      children [
+        DEF FRAME Shape {
+          appearance Appearance {
+            texture ImageTexture {
+              url [
+                "textures/carbon-fiber-background.jpg"
+              ]
+            }
+          }
+          geometry Box {
+            size 0.1 0.005 0.1
+          }
+        }
+       Transform {
+        translation 0 -0.05 0.04
+        children [
+         DEF LEG1 Shape {
+           appearance Appearance {
+            texture ImageTexture {
+              url [
+                "textures/carbon-fiber-background.jpg"
+              ]
+            }
+          }
+         geometry Cylinder {
+          height 0.10
+          radius 0.005
+         }
+        }  
+       ] 
+      }
+      Transform {
+        translation 0 -0.05 -0.04
+        children [
+        DEF LEG2 Shape {
+          appearance Appearance {
+            texture ImageTexture {
+              url [
+                "textures/carbon-fiber-background.jpg"
+              ]
+            }
+          }
+          geometry Cylinder {
+            height 0.10
+            radius 0.005
+          }
+        }  
+       ] 
+      }
+      Transform {
+        translation 0 -0.1 -0.04
+        children [
+        DEF FOOT1 Shape {
+          appearance Appearance {
+            texture ImageTexture {
+              url [
+                "textures/carbon-fiber-background.jpg"
+              ]
+            }
+          }
+          geometry Box {
+            size 0.15 0.005 0.015
+          }
+        }  
+       ] 
+      }
+      Transform {
+        translation 0 -0.1 0.04
+        children [
+        DEF FOOT2 Shape {
+          appearance Appearance {
+            texture ImageTexture {
+              url [
+                "textures/carbon-fiber-background.jpg"
+              ]
+            }
+          }
+          geometry Box {
+            size 0.15 0.005 0.015
+          }
+        }  
+       ] 
+      }
+     ]
+    }
+    Transform {
+      rotation 0 1 0 0
+      children [
+        DEF BODY Shape {
+          appearance Appearance {
+            texture ImageTexture {
+              url [
+                "textures/carbon-fiber-background.jpg"
+              ]
+            }
+          }
+          geometry Box {
+            size 0.06 0.05 0.06
+          }
+        }
+      ]
+    }
+    DEF ROTOR_1 Transform {
+      translation 0.0742 0 -0.0742
+      rotation 0 1 0 0.7854
+      children [
+        Transform {
+          translation 0.1050 0.015 0
+          children [
+            Propeller {
+              shaftAxis 0 1 0
+              thrustConstants IS MotorThrust_p
+              torqueConstants IS MotorTorque
+              device RotationalMotor {
+                name "rotor1"
+                controlPID 20 0 0.5
+                maxVelocity IS max_prop_vel
+                maxTorque 120000
+              }
+              fastHelix DEF FAST_HELIX Solid {
+                children [
+                  DEF FAST_HELIX_SHAPE Shape {
+                    appearance DEF FAST_HELIX_APPEARANCE Appearance {
+                      material Material {
+                        diffuseColor 1 1 1
+                        transparency 0.5
+                      }
+                    }
+                    geometry Cylinder {
+                      height 0.003
+                      radius 0.1
+                    }
+                  }
+                ]
+              }
+              slowHelix DEF HELIX Solid {
+                rotation 0 -1 0 5.6406
+                children [
+                  DEF TAIL_ROTOR Transform {
+                    rotation 1 0 0 1.5708
+                    children [
+                      DEF HUB Shape {
+                        appearance DEF BLACK_METAL Appearance {
+                          material Material {
+                            diffuseColor 0 0 0
+                            specularColor 1 1 1
+                          }
+                        }
+                        geometry Capsule {
+                          height 0.01
+                          radius 0.008
+                        }
+                      }
+                      DEF BLADE_PITCH_AXIS Shape {
+                        appearance USE BLACK_METAL
+                        geometry Cylinder {
+                          height 0.04
+                          radius 0.004
+                        }
+                      }
+                      DEF RIGHT_BLADE Transform {
+                        translation 0 0.035 0
+                        rotation 0 1 0 0.3618
+                        children [
+                          DEF BLADE_SHAPE Shape {
+                            geometry Box {
+                              size 0.006 0.1 0.002
+                            }
+                          }
+                        ]
+                      }
+                      DEF RIGHT_BLADE Transform {
+                        translation 0 -0.035 0
+                        rotation 0 1 0 -0.3618
+                        children [
+                          USE BLADE_SHAPE
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+        DEF ROTORAXIS Shape {
+          appearance Appearance {
+            texture ImageTexture {
+              url [
+                "textures/carbon-fiber-background.jpg"
+              ]
+            }
+          }
+          geometry Box {
+            size 0.21 0.005 0.015
+          }
+        }
+        Transform {
+          translation 0.1050 0.005 0
+          children [
+            Solid {
+            }
+            Shape {
+              geometry Cylinder {
+                height 0.015
+                radius 0.0075
+              }
+            }
+          ]
+        }
+      ]
+    }
+    DEF ROTOR_2 Transform {
+      translation -0.0742 0 -0.0742
+      rotation 0 1 0 2.3562
+      children [
+        USE ROTORAXIS
+        Transform {
+          translation 0.1050 0.015 0
+          children [
+            Propeller {
+              shaftAxis 0 1 0
+              thrustConstants IS MotorThrust_n
+              torqueConstants IS MotorTorque
+              device RotationalMotor {
+                name "rotor2"
+                controlPID 20 0 0.5
+                maxVelocity IS max_prop_vel
+                maxTorque 120000
+              }
+              fastHelix DEF FAST_HELIX Solid {
+                children [
+                  USE FAST_HELIX_SHAPE
+                ]
+              }
+              slowHelix DEF HELIX Solid {
+                rotation 0 1 0 2.54505
+                children [
+                  DEF TAIL_ROTOR Transform {
+                    rotation 1 0 0 1.5708
+                    children [
+                      DEF HUB Shape {
+                        appearance USE BLACK_METAL
+                        geometry Capsule {
+                          height 0.01
+                          radius 0.008
+                        }
+                      }
+                      DEF BLADE_PITCH_AXIS Shape {
+                        appearance USE BLACK_METAL
+                        geometry Cylinder {
+                          height 0.04
+                          radius 0.004
+                        }
+                      }
+                      DEF RIGHT_BLADE Transform {
+                        translation 0 0.035 0
+                        rotation 0 1 0 0.3618
+                        children [
+                          DEF BLADE_SHAPE Shape {
+                            geometry Box {
+                              size 0.006 0.1 0.002
+                            }
+                          }
+                        ]
+                      }
+                      DEF RIGHT_BLADE Transform {
+                        translation 0 -0.035 0
+                        rotation 0 1 0 -0.3618
+                        children [
+                          USE BLADE_SHAPE
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+        Transform {
+          translation 0.1050 0.005 0
+          children [
+            Shape {
+              geometry Cylinder {
+                height 0.015
+                radius 0.0075
+              }
+            }
+          ]
+        }
+      ]
+    }
+    DEF ROTOR_3 Transform {
+      translation -0.0742 0 0.0742
+      rotation 0 1 0 -2.3562
+      children [
+        USE ROTORAXIS
+        Transform {
+          translation 0.1050 0.015 0
+          children [
+            Propeller {
+              shaftAxis 0 1 0
+              thrustConstants IS MotorThrust_p
+              torqueConstants IS MotorTorque
+              device RotationalMotor {
+                name "rotor3"
+                controlPID 20 0 0.5
+                maxVelocity IS max_prop_vel
+                maxTorque 120000
+              }
+              fastHelix DEF FAST_HELIX Solid {
+                children [
+                  USE FAST_HELIX_SHAPE
+                ]
+              }
+              slowHelix DEF HELIX Solid {
+                rotation 0 -1 0 5.6406
+                children [
+                  DEF TAIL_ROTOR Transform {
+                    rotation 1 0 0 1.5708
+                    children [
+                      DEF HUB Shape {
+                        appearance USE BLACK_METAL
+                        geometry Capsule {
+                          height 0.01
+                          radius 0.008
+                        }
+                      }
+                      DEF BLADE_PITCH_AXIS Shape {
+                        appearance USE BLACK_METAL
+                        geometry Cylinder {
+                          height 0.04
+                          radius 0.004
+                        }
+                      }
+                      DEF RIGHT_BLADE Transform {
+                        translation 0 0.035 0
+                        rotation 0 1 0 0.3618
+                        children [
+                          DEF BLADE_SHAPE Shape {
+                            geometry Box {
+                              size 0.006 0.1 0.002
+                            }
+                          }
+                        ]
+                      }
+                      DEF RIGHT_BLADE Transform {
+                        translation 0 -0.035 0
+                        rotation 0 1 0 -0.3618
+                        children [
+                          USE BLADE_SHAPE
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+        Transform {
+          translation 0.1050 0.005 0
+          children [
+            Shape {
+              geometry Cylinder {
+                height 0.015
+                radius 0.0075
+              }
+            }
+          ]
+        }
+      ]
+    }
+    DEF ROTOR_4 Transform {
+      translation 0.0742 0 0.0742
+      rotation 0 1 0 -0.7854
+      children [
+        USE ROTORAXIS
+        Transform {
+          translation 0.1050 0.015 0
+          children [
+            Propeller {
+              shaftAxis 0 1 0
+              thrustConstants IS MotorThrust_n
+              torqueConstants IS MotorTorque
+              device RotationalMotor {
+                name "rotor4"
+                controlPID 20 0 0.5
+                maxVelocity IS max_prop_vel
+                maxTorque 120000
+              }
+              fastHelix DEF FAST_HELIX Solid {
+                children [
+                  USE FAST_HELIX_SHAPE
+                ]
+              }
+              slowHelix DEF HELIX Solid {
+                rotation 0 1 0 2.54505
+                children [
+                  DEF TAIL_ROTOR Transform {
+                    rotation 1 0 0 1.5708
+                    children [
+                      DEF HUB Shape {
+                        appearance USE BLACK_METAL
+                        geometry Capsule {
+                          height 0.01
+                          radius 0.008
+                        }
+                      }
+                      DEF BLADE_PITCH_AXIS Shape {
+                        appearance USE BLACK_METAL
+                        geometry Cylinder {
+                          height 0.04
+                          radius 0.004
+                        }
+                      }
+                      DEF RIGHT_BLADE Transform {
+                        translation 0 0.035 0
+                        rotation 0 1 0 0.3618
+                        children [
+                          DEF BLADE_SHAPE Shape {
+                            geometry Box {
+                              size 0.006 0.1 0.002
+                            }
+                          }
+                        ]
+                      }
+                      DEF RIGHT_BLADE Transform {
+                        translation 0 -0.035 0
+                        rotation 0 1 0 -0.3618
+                        children [
+                          USE BLADE_SHAPE
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+        Transform {
+          translation 0.1050 0.005 0
+          children [
+            Shape {
+              geometry Cylinder {
+                height 0.015
+                radius 0.0075
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+  name "quadrotor"
+  boundingObject Group {
+    children [
+      Transform {
+      translation 0.0742 0 -0.0742
+      rotation 0 1 0 0.7854
+        children [
+          USE ROTORAXIS
+        ]
+      }
+      Transform {
+      translation -0.0742 0 -0.0742
+      rotation 0 1 0 2.3562
+        children [
+          USE ROTORAXIS
+        ]
+      }
+      Transform {
+       translation -0.0742 0 0.0742
+       rotation 0 1 0 -2.3562
+        children [
+          USE ROTORAXIS
+        ]
+      }
+      Transform {
+        translation 0.0742 0 0.0742
+        rotation 0 1 0 -0.7854
+        children [
+          USE ROTORAXIS
+        ]
+      }
+      Transform {
+        children [
+          USE FRAME
+        ]
+      }
+      Transform {
+      translation 0 -0.05 0.04
+        children [
+          USE LEG1
+        ]
+      }
+      Transform {
+      translation 0 -0.05 -0.04
+        children [
+          USE LEG2
+        ]
+      }
+      Transform {
+      translation 0 -0.1 -0.04
+        children [
+          USE FOOT1
+        ]
+      }   
+      Transform {
+      translation 0 -0.1 0.04
+        children [
+          USE FOOT2
+        ]
+      }
+      Transform {
+        children [
+          USE BODY
+        ]
+      }
+    ]
+  }
+  physics Physics {
+    density -1
+    mass IS mass
+    centerOfMass [0 0 0]
+    inertiaMatrix IS inertiaMatrix
+    damping Damping {
+    }
+  }
+  controller IS controller
+#  controllerArgs IS controllerArgs
+  name IS name
+}
+}

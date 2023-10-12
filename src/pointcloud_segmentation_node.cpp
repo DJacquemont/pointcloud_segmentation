@@ -14,25 +14,34 @@
 using Eigen::MatrixXf;
 
 
+// struct{
+//   int a;
+//   int b;
+// } ejfbwiefbws; 
+
+
 // Utility functions prototype
 int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc);
 double orthogonal_LSQ(const PointCloud &pc, Vector3d* a, Vector3d* b);
 
 
 // Class caring for the node's communication (Subscription & Publication)
-class SubscribeAndPublish
+class PtCdProcessing
 {
   public:
   // Class initialisation
-  SubscribeAndPublish()
+  PtCdProcessing()
   {
-    tof_pc_sub = node.subscribe("/tof_pc", 1000, &SubscribeAndPublish::pointcloudCallback, this);
+    tof_pc_sub = node.subscribe("/tof_pc", 1000, &PtCdProcessing::pointcloudCallback, this);
     marker_pub = node.advertise<visualization_msgs::Marker>("visualization_marker", 10);
   }
 
   // Callback function receiving ToF images from the Autopilot package
   // and publishing marker lines to vizualise the computed lines in rviz
   void pointcloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg);
+
+  // Method computing 3d lines with the Hough transform
+  int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc);
 
   private:
   ros::NodeHandle node;
@@ -52,7 +61,7 @@ int main(int argc, char* argv[]){
 
   ros::init(argc, argv, "pointcloud_seg");
 
-  SubscribeAndPublish SAPobject;
+  PtCdProcessing SAPobject;
 
   ros::spin();
 
@@ -66,8 +75,10 @@ int main(int argc, char* argv[]){
 
 // Callback function receiving ToF images from the Autopilot package
 // and publishing marker lines to vizualise the computed lines in rviz
-void SubscribeAndPublish::pointcloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg)
+void PtCdProcessing::pointcloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg)
   {
+    // 3dLines.clear()
+
     pcl::PointCloud<pcl::PointXYZ> pcl_cloud;
     pcl::fromROSMsg(*msg, pcl_cloud);
 
@@ -78,33 +89,33 @@ void SubscribeAndPublish::pointcloudCallback(const sensor_msgs::PointCloud2::Con
       ROS_INFO("ERROR - Unable to perform the Hough transform");
     }
 
-    // Creating visualisation markers
-    visualization_msgs::Marker line_list;
-    line_list.header.frame_id = "world";
-    line_list.header.stamp = ros::Time::now();
-    line_list.ns = "points_and_lines";
-    line_list.action = visualization_msgs::Marker::ADD;
-    line_list.pose.orientation.w = 1.0;
-    line_list.type = visualization_msgs::Marker::LINE_LIST;
-    line_list.scale.x = 0.1;
-    line_list.scale.y = 0.1;
-    line_list.color.r = 1.0;
-    line_list.color.a = 1.0;
+    // // Creating visualisation markers
+    // visualization_msgs::Marker line_list;
+    // line_list.header.frame_id = "world";
+    // line_list.header.stamp = ros::Time::now();
+    // line_list.ns = "points_and_lines";
+    // line_list.action = visualization_msgs::Marker::ADD;
+    // line_list.pose.orientation.w = 1.0;
+    // line_list.type = visualization_msgs::Marker::LINE_LIST;
+    // line_list.scale.x = 0.1;
+    // line_list.scale.y = 0.1;
+    // line_list.color.r = 1.0;
+    // line_list.color.a = 1.0;
 
-    // Test: displaying 3 lines in rviz
-    for (uint32_t i = 0; i < 3; ++i)
-    {
-      geometry_msgs::Point p;
-      p.x = 0;
-      p.y = i;
-      p.z = 1;
+    // // Test: displaying 3 lines in rviz
+    // for (uint32_t i = 0; i < 3; ++i)
+    // {
+    //   geometry_msgs::Point p;
+    //   p.x = 0;
+    //   p.y = i;
+    //   p.z = 1;
 
-      line_list.points.push_back(p);
-      p.z += 1.0;
-      line_list.points.push_back(p);
-    }
+    //   line_list.points.push_back(p);
+    //   p.z += 1.0;
+    //   line_list.points.push_back(p);
+    // }
 
-    marker_pub.publish(line_list);
+    // marker_pub.publish(line_list);
   }
 
 
@@ -148,7 +159,12 @@ double orthogonal_LSQ(const PointCloud &pc, Vector3d* a, Vector3d* b){
 }
 
 
-int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc){
+int PtCdProcessing::hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc){
+
+  // ------------------ TEST IN PROGRESS ------------------ //
+  // Creating visualisation marker
+  visualization_msgs::Marker line_list;
+  // ------------------ TEST IN PROGRESS ------------------ //
 
   PointCloud X;
   Vector3d point;
@@ -171,9 +187,9 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc){
   }
 
   // default parameter values
-  double opt_dx = 0.4;
-  int opt_nlines = 1;
-  int opt_minvotes = 1;
+  double opt_dx = 0;
+  int opt_nlines = 4;
+  int opt_minvotes = 30;
   int opt_verbose = 0;
 
   // number of icosahedron subdivisions for direction discretization
@@ -265,10 +281,42 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc){
     ROS_INFO("npoints=%lu, a=(%f,%f,%f), b=(%f,%f,%f)",
               Y.points.size(), a.x, a.y, a.z, b.x, b.y, b.z);
 
+    // ------------------ TEST IN PROGRESS ------------------ //
+
+    line_list.header.frame_id = "world";
+    line_list.header.stamp = ros::Time::now();
+    line_list.ns = "points_and_lines";
+    line_list.action = visualization_msgs::Marker::ADD;
+    line_list.pose.orientation.w = 1.0;
+    line_list.type = visualization_msgs::Marker::LINE_LIST;
+    line_list.scale.x = 0.1;
+    line_list.scale.z = 0.1;
+    line_list.color.r = 1.0;
+    line_list.color.a = 1.0;
+
+    int t = 3;
+
+    geometry_msgs::Point p1;
+    p1.x = a.x;
+    p1.y = a.y;
+    p1.z = a.z;
+
+    geometry_msgs::Point p2;
+    p2.x = a.x+t*b.x;
+    p2.y = a.y+t*b.y;
+    p2.z = a.z+t*b.z;
+
+    line_list.points.push_back(p1);
+    line_list.points.push_back(p2);
+
+    // ------------------ TEST IN PROGRESS ------------------ //
+
     X.removePoints(Y);
 
   } while ((X.points.size() > 1) && 
            ((opt_nlines == 0) || (opt_nlines > nlines)) && ros::ok());
+
+  marker_pub.publish(line_list);
 
   // clean up
   delete hough;
