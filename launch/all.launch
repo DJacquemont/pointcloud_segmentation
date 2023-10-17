@@ -2,6 +2,7 @@
 
 <launch>
 
+    <arg name="port"        default="1234" />       <!-- Port used by extern controllers with Webots, default: 1234 -->
     <arg name="trajectory"  default="eight" />      <!-- Trajectory to follow -->
     <arg name="imu_id"      default="1" />      <!-- IMU id to use -->
     <arg name="rviz_AP_pkg" default="false" /> <!-- Launch rviz in the Auto Pilot package -->
@@ -13,9 +14,10 @@
 
     <!-- Including & starting Autopilot launchfile with correct parameters-->
     <include file="$(find auto_pilot_pkg)/launch/all.launch">
-        <arg name="trajectory" value="$(arg trajectory)"/>
-        <arg name="imu_id"     value="$(arg imu_id)"/>
-        <arg name="rviz"     value="$(arg rviz_AP_pkg)"/>
+        <arg name="port"        value="$(arg port)"/>
+        <arg name="trajectory"  value="$(arg trajectory)"/>
+        <arg name="imu_id"      value="$(arg imu_id)"/>
+        <arg name="rviz"        value="$(arg rviz_AP_pkg)"/>
     </include>
 
     <!-- Pointcloud segmentation node, responsible for processing tof pointclouds -->
