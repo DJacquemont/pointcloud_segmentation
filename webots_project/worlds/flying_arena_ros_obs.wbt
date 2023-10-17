@@ -89,7 +89,7 @@ Solid {
   boundingObject USE SHAPE_CYL
 }
 Solid {
-  translation -1.07812 -0.914525 1.39192
+  translation -1.00563 -1.68319 1.30787
   rotation -0.12586805103390392 -0.26476410735008526 0.9560633876412374 -0.5244953071795866
   children [
     USE SHAPE_CYL

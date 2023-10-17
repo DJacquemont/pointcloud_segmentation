@@ -69,7 +69,7 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, visualization_msgs::Marker&
   // default parameter values
   double opt_dx = 0;
   int opt_nlines = 4;
-  int opt_minvotes = 30;
+  int opt_minvotes = 15;
   int opt_verbose = 0;
 
   // number of icosahedron subdivisions for direction discretization
