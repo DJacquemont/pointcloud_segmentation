@@ -1,6 +1,5 @@
 #VRML_SIM R2023b utf8
 
-EXTERNPROTO "../protos/voxl_m500.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023a/projects/objects/floors/protos/Floor.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023a/projects/appearances/protos/Parquetry.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023a/projects/appearances/protos/PaintedWood.proto"
@@ -10,8 +9,8 @@ WorldInfo {
   basicTimeStep 8
 }
 Viewpoint {
-  orientation 0.258835537000728 0.019375685910123213 -0.9657270564611189 3.058412985698887
-  position 10.753626374767574 2.0698700311298333 6.792480820930482
+  orientation 0.394612566099376 0.7231013419649167 -0.5669262491056506 1.5720663379923896
+  position -2.1306839128051056 4.299680759150244 10.749366579447852
 }
 Background {
   skyColor [
@@ -50,19 +49,14 @@ DEF CEILING Solid {
     }
   ]
 }
-voxl_m500 {
-  translation -0.21 -0.7 0.01486560299999986
-  rotation -7.322704088551495e-18 -3.2319615972564333e-19 1 0.523599
-  controller "<none>"
-}
 starling {
   translation -1.11037 0.857915 0.0911804
   rotation 0.08501426512376495 0.07254394840926912 -0.9937353522314981 0.7486026183559755
   controller "<extern>"
 }
 Solid {
-  translation 1.50989 0.703409 1
-  rotation 0.6947517066745018 -0.6947417066787238 0.18615592140461423 0.736198
+  translation 2.54428 0.970909 1.06206
+  rotation 0.8660271018320259 9.564751124673791e-06 0.49999705879228645 0.523601
   children [
     DEF SHAPE_CYL Shape {
       appearance PBRAppearance {
@@ -77,8 +71,8 @@ Solid {
   boundingObject USE SHAPE_CYL
 }
 Solid {
-  translation -0.670182 1.6939 1
-  rotation 0.6947491893632964 0.6947441893619337 0.18615605073935165 -0.7361953071795861
+  translation -1.15656 2.53005 1.32936
+  rotation -0.8660264188193769 9.972344822729602e-06 -0.4999982418043463 0.523597
   children [
     USE SHAPE_CYL
   ]
@@ -86,8 +80,8 @@ Solid {
   boundingObject USE SHAPE_CYL
 }
 Solid {
-  translation 1.5 1 1
-  rotation 0.6947491893632964 0.6947441893619337 0.18615605073935165 -0.7361953071795861
+  translation 2.50745 0.791393 1.16441
+  rotation -0.7132281818457503 0.437942111658392 -0.5472771395346183 0.584055
   children [
     USE SHAPE_CYL
   ]
@@ -95,8 +89,8 @@ Solid {
   boundingObject USE SHAPE_CYL
 }
 Solid {
-  translation -0.516839 0.494453 1
-  rotation 0.6947491893632964 0.6947441893619337 0.18615605073935165 -0.7361953071795861
+  translation -1.07812 -0.914525 1.39192
+  rotation -0.12586805103390392 -0.26476410735008526 0.9560633876412374 -0.5244953071795866
   children [
     USE SHAPE_CYL
   ]

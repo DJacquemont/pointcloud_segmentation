@@ -7,6 +7,7 @@ add_compile_options(-std=c++14)
 SET(Eigen3_DIR "/usr/lib/cmake/eigen3/") # or include /usr/include/eigen3/
 SET(PCL_DIR "/usr/lib/x86_64-linux-gnu/cmake/pcl/")
 INCLUDE_DIRECTORIES ( "/home/djacquem/WS/src/pointcloud_segmentation/libraries/hough-3d-lines" )
+INCLUDE_DIRECTORIES ( "/home/djacquem/WS/src/pointcloud_segmentation/include/pointcloud_segmentation" )
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
