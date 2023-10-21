@@ -10,6 +10,10 @@
 
 using Eigen::MatrixXf;
 
+struct line {
+  Vector3d p1;
+  Vector3d p2;
+};
 
 // orthogonal least squares fit with libeigen
 double orthogonal_LSQ(const PointCloud &pc, Vector3d* a, Vector3d* b){
@@ -44,7 +48,7 @@ double orthogonal_LSQ(const PointCloud &pc, Vector3d* a, Vector3d* b){
 }
 
 // Method computing 3d lines with the Hough transform
-int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, visualization_msgs::Marker& line_list){
+int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<line>& computed_lines){
 
   PointCloud X;
   Vector3d point;
@@ -160,21 +164,14 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, visualization_msgs::Marker&
     ROS_INFO("npoints=%lu, a=(%f,%f,%f), b=(%f,%f,%f)",
               Y.points.size(), a.x, a.y, a.z, b.x, b.y, b.z);
 
-    // Computing points RVIZ
-    geometry_msgs::Point p1;
-    p1.x = a.x;
-    p1.y = a.y;
-    p1.z = a.z;
-
-    geometry_msgs::Point p2;
     int t = 3;
-    p2.x = a.x+t*b.x;
-    p2.y = a.y+t*b.y;
-    p2.z = a.z+t*b.z;
-
-    // Storing points RVIZ
-    line_list.points.push_back(p1);
-    line_list.points.push_back(p2);
+    Vector3d p1(a.x, a.y, a.z);
+    Vector3d p2(a.x+t*b.x, a.y+t*b.y, a.y+t*b.y);
+    
+    line l;
+    l.p1 = p1;
+    l.p2 = p2;
+    computed_lines.push_back(l);
 
     X.removePoints(Y);
 
