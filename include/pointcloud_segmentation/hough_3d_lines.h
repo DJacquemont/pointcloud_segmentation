@@ -15,6 +15,26 @@ struct line {
   Vector3d p2;
 };
 
+double find_t(Vector3d a, Vector3d b, Vector3d p, bool mode){
+  double t;
+  double t1 = (p.x - a.x) / b.x;
+  double t2 = (p.y - a.y) / b.y;
+  double t3 = (p.z - a.z) / b.z;
+
+  if (mode)
+    t = std::max(std::max(t1, t2), t3);
+  else
+    t = std::min(std::min(t1, t2), t3);
+  return t;
+}
+
+Vector3d find_proj(Vector3d a, Vector3d b, Vector3d p){
+  Vector3d p_A(a.x, a.y, a.z);
+  Vector3d p_B(a.x+b.x, a.y+b.y, a.z+b.z);
+  Vector3d p_proj = p_A + (((p-p_A)*(p_B-p_A))*(p_B-p_A))/((p_B-p_A)*(p_B-p_A));
+  return p_proj;
+}
+
 // orthogonal least squares fit with libeigen
 double orthogonal_LSQ(const PointCloud &pc, Vector3d* a, Vector3d* b){
   // rc = largest eigenvalue
@@ -48,7 +68,7 @@ double orthogonal_LSQ(const PointCloud &pc, Vector3d* a, Vector3d* b){
 }
 
 // Method computing 3d lines with the Hough transform
-int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<line>& computed_lines){
+int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<line>& computed_lines, pcl::PointCloud<pcl::PointXYZ> &pc_out){
 
   PointCloud X;
   Vector3d point;
@@ -71,9 +91,9 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<line>& computed
   }
 
   // default parameter values
-  double opt_dx = 0;
+  double opt_dx = 0.15;
   int opt_nlines = 4;
-  int opt_minvotes = 10;
+  int opt_minvotes = 20;
   int opt_verbose = 0;
 
   // number of icosahedron subdivisions for direction discretization
@@ -161,17 +181,45 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<line>& computed
 
     nlines++;
 
-    ROS_INFO("npoints=%lu, a=(%f,%f,%f), b=(%f,%f,%f)",
-              Y.points.size(), a.x, a.y, a.z, b.x, b.y, b.z);
+    if (opt_verbose)
+      ROS_INFO("npoints=%lu, a=(%f,%f,%f), b=(%f,%f,%f)",
+                Y.points.size(), a.x, a.y, a.z, b.x, b.y, b.z);
 
-    int t = 3;
-    Vector3d p1(a.x, a.y, a.z);
-    Vector3d p2(a.x+t*b.x, a.y+t*b.y, a.y+t*b.y);
     
+    // find t_min and t_max length of the line segment
+    Vector3d p_proj = find_proj(a, b, Y.points[0] + X.shift);
+    double t_min = find_t(a, b, p_proj, 0);
+    double t_max = find_t(a, b, p_proj, 1);
+
+    for(std::vector<Vector3d>::iterator it = Y.points.begin(); it != Y.points.end(); it++){
+      double t_min_test = find_t(a, b, find_proj(a, b, *it + X.shift), 0);
+      if (t_min > t_min_test)
+        t_min = t_min_test;
+
+      double t_max_test = find_t(a, b, find_proj(a, b, *it + X.shift), 1);
+      if (t_max < t_max_test)
+        t_max = t_max_test;
+      }
+
+    Vector3d p1 = a + t_min*b;
+    Vector3d p2 = a + t_max*b;
+
     line l;
     l.p1 = p1;
     l.p2 = p2;
     computed_lines.push_back(l);
+
+
+    // Rviz markers points
+    for (std::vector<Vector3d>::iterator it = Y.points.begin(); it != Y.points.end(); it++)
+    {
+      Vector3d p_hough = *it + X.shift;
+      pcl::PointXYZ p_pcl;
+      p_pcl.x = p_hough.x;
+      p_pcl.y = p_hough.y;
+      p_pcl.z = p_hough.z;
+      pc_out.points.push_back(p_pcl);
+    }
 
     X.removePoints(Y);
 

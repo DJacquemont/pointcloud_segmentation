@@ -1,0 +1,137 @@
+#VRML_SIM R2023b utf8
+
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023a/projects/objects/floors/protos/Floor.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023a/projects/appearances/protos/Parquetry.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023a/projects/appearances/protos/PaintedWood.proto"
+EXTERNPROTO "../protos/starling.proto"
+
+WorldInfo {
+  basicTimeStep 8
+}
+Viewpoint {
+  orientation -0.12444058886907033 0.8522927256410671 0.5080468971081703 0.3660567403279279
+  position -9.329047371591457 -0.638584806347614 4.365817281405888
+}
+Background {
+  skyColor [
+    0.533333 0.541176 0.521569
+  ]
+}
+Floor {
+  rotation 0 0 1 1.5707963267948966
+  size 6 6
+  appearance Parquetry {
+    type "light strip"
+  }
+}
+DEF CEILING Solid {
+  translation 0 0 4
+  rotation 0 -1 0 3.141592653589793
+  children [
+    Shape {
+      appearance PaintedWood {
+        colorOverride 0.560784 0.34902 0.00784314
+      }
+      geometry Plane {
+        size 6 6
+      }
+    }
+    PointLight {
+      attenuation 0 0 1
+      intensity 9
+      location -1.5 -1.5 0.3
+      castShadows TRUE
+    }
+    PointLight {
+      attenuation 0 0 1
+      intensity 9
+      location 1.5 1.5 0.3
+    }
+  ]
+}
+starling {
+  hidden linearVelocity_0 -8.488793278294703e-10 -9.171067280687705e-09 -1.2953708269563846
+  hidden angularVelocity_0 4.6483317249612983e-07 -6.622328280062745e-08 -4.122651663725009e-12
+  translation -2.4725836054278766e-11 3.2357318230580166e-09 0.030766792192237758
+  rotation 0.9911539102421979 -0.1327174669832232 -1.3006079869378877e-05 6.546443762378752e-08
+  controller "<extern>"
+}
+Solid {
+  translation 2.54428 0.970909 1.06206
+  rotation 0.8660271018320259 9.564751124673791e-06 0.49999705879228645 0.523601
+  children [
+    DEF SHAPE_CYL Shape {
+      appearance PBRAppearance {
+        metalness 0
+      }
+      geometry Cylinder {
+        radius 0.1
+      }
+    }
+  ]
+  name "solid(1)"
+  boundingObject USE SHAPE_CYL
+}
+Solid {
+  translation -1.15656 2.53005 1.32936
+  rotation -0.8660264188193769 9.972344822729602e-06 -0.4999982418043463 0.523597
+  children [
+    USE SHAPE_CYL
+  ]
+  name "solid(2)"
+  boundingObject USE SHAPE_CYL
+}
+Solid {
+  translation -0.141122 1.74838 1.5288
+  rotation 0.44078619725885604 0.8971194014752457 0.029737313307922165 -1.7407453071795862
+  children [
+    USE SHAPE_CYL
+  ]
+  name "solid(7)"
+  boundingObject USE SHAPE_CYL
+}
+Solid {
+  translation -2.46719 1.44507 1.93617
+  rotation -0.5963841013671162 -0.10475701780549945 -0.7958341352675415 0.323847
+  children [
+    USE SHAPE_CYL
+  ]
+  name "solid(5)"
+  boundingObject USE SHAPE_CYL
+}
+Solid {
+  translation 1.27315 -0.0327515 1.21177
+  rotation 0.9787364023586177 0.15417006337932607 0.1353020556226865 1.39541
+  children [
+    USE SHAPE_CYL
+  ]
+  name "solid(6)"
+  boundingObject USE SHAPE_CYL
+}
+Solid {
+  translation 2.50745 0.791393 1.16441
+  rotation -0.7132281818457503 0.437942111658392 -0.5472771395346183 0.584055
+  children [
+    USE SHAPE_CYL
+  ]
+  name "solid(3)"
+  boundingObject USE SHAPE_CYL
+}
+Solid {
+  translation 1.24905 -0.304787 1.28889
+  rotation 0.9631009909328859 -0.24324799770994177 -0.1151819989156191 -0.4405853071795862
+  children [
+    USE SHAPE_CYL
+  ]
+  name "solid(4)"
+  boundingObject USE SHAPE_CYL
+}
+Solid {
+  translation 1.29449 0.462641 1.0745
+  rotation 0.9500381022931303 0.3117510335670633 0.015456301664221125 0.379099
+  children [
+    USE SHAPE_CYL
+  ]
+  name "solid(8)"
+  boundingObject USE SHAPE_CYL
+}

@@ -2,7 +2,6 @@
 #include <sensor_msgs/PointCloud2.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/filters/voxel_grid.h>
-#include <pcl/filters/extract_indices.h>
 #include <pcl/filters/passthrough.h>
 #include <visualization_msgs/Marker.h>
 
@@ -18,6 +17,7 @@ public:
     tof_pc_sub = node.subscribe("/tof_pc", 1, &PtCdProcessing::pointcloudCallback, this);
     marker_pub = node.advertise<visualization_msgs::Marker>("visualization_marker", 1);
     filtered_pc_pub = node.advertise<sensor_msgs::PointCloud2>("filtered_pointcloud", 1);
+    hough_pc_pub = node.advertise<sensor_msgs::PointCloud2>("hough_pointcloud", 1);
   }
 
   // Callback function receiving ToF images from the Autopilot package
@@ -29,6 +29,7 @@ private:
   ros::Subscriber tof_pc_sub;
   ros::Publisher marker_pub;
   ros::Publisher filtered_pc_pub;
+  ros::Publisher hough_pc_pub;
 };
 
 //--------------------------------------------------------------------
@@ -61,9 +62,6 @@ void PtCdProcessing::pointcloudCallback(const sensor_msgs::PointCloud2::ConstPtr
   pcl::PCLPointCloud2::Ptr filtered_cloud (new pcl::PCLPointCloud2);
   pcl_conversions::toPCL(*msg, *cloud);
 
-  ROS_INFO("Pointcloud Received : w %d, h %d, is_dense %d",
-           cloud->width, cloud->height, cloud->is_dense);
-
   // Filtering pointcloud
   pcl::PassThrough<pcl::PCLPointCloud2> pass;
   pass.setInputCloud(cloud);
@@ -88,9 +86,10 @@ void PtCdProcessing::pointcloudCallback(const sensor_msgs::PointCloud2::ConstPtr
 
   // line extraction with the Hough transform
   std::vector<line> computed_lines;
+  pcl::PointCloud<pcl::PointXYZ> pc_out;
   pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_cloud_XYZ( new pcl::PointCloud<pcl::PointXYZ> );
   pcl::fromPCLPointCloud2(*filtered_cloud, *filtered_cloud_XYZ ); 
-  if (hough3dlines(*filtered_cloud_XYZ, computed_lines))
+  if (hough3dlines(*filtered_cloud_XYZ, computed_lines, pc_out))
     ROS_INFO("ERROR - Unable to perform the Hough transform");
 
   // Rviz markers
@@ -101,9 +100,9 @@ void PtCdProcessing::pointcloudCallback(const sensor_msgs::PointCloud2::ConstPtr
   line_list.action = visualization_msgs::Marker::ADD;
   line_list.pose.orientation.w = 1.0;
   line_list.type = visualization_msgs::Marker::LINE_LIST;
-  line_list.scale.x = 0.1;
-  line_list.scale.y = 0.1;
-  line_list.scale.z = 0.1;
+  line_list.scale.x = 0.05;
+  line_list.scale.y = 0.05;
+  line_list.scale.z = 0.05;
   line_list.color.r = 1.0;
   line_list.color.a = 1.0;
 
@@ -121,9 +120,19 @@ void PtCdProcessing::pointcloudCallback(const sensor_msgs::PointCloud2::ConstPtr
     line_list.points.push_back(p2);
   }
 
+  // Publishing line Hough
   marker_pub.publish(line_list);
 
-  sensor_msgs::PointCloud2 output;
-  pcl_conversions::fromPCL(*filtered_cloud, output);
-  filtered_pc_pub.publish(output);
+  // Publishing points used Hough
+  pcl::PCLPointCloud2::Ptr pts_hough (new pcl::PCLPointCloud2);
+  sensor_msgs::PointCloud2 output_hough;
+  pcl::toPCLPointCloud2(pc_out, *pts_hough);
+  pcl_conversions::fromPCL(*pts_hough, output_hough);
+  output_hough.header.frame_id = "world";
+  hough_pc_pub.publish(output_hough);
+
+  // Publishing PCL filtered cloud
+  sensor_msgs::PointCloud2 output_filtered;
+  pcl_conversions::fromPCL(*filtered_cloud, output_filtered);
+  filtered_pc_pub.publish(output_filtered);
 }
