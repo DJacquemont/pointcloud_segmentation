@@ -8,6 +8,9 @@
 #include <eigen3/Eigen/Dense>
 #include "hough_3d_lines.h"
 
+#include <chrono>
+using namespace std::chrono;
+
 // Class caring for the node's communication (Subscription & Publication)
 class PtCdProcessing
 {
@@ -43,6 +46,8 @@ int main(int argc, char *argv[])
 
   ros::init(argc, argv, "pointcloud_seg");
 
+  initHoughSpace();
+
   PtCdProcessing SAPobject;
 
   ros::spin();
@@ -58,6 +63,8 @@ int main(int argc, char *argv[])
 // and publishing marker lines to vizualise the computed lines in rviz
 void PtCdProcessing::pointcloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg)
 {
+  auto callStart = high_resolution_clock::now();
+
   pcl::PCLPointCloud2::Ptr cloud (new pcl::PCLPointCloud2);
   pcl::PCLPointCloud2::Ptr filtered_cloud (new pcl::PCLPointCloud2);
   pcl_conversions::toPCL(*msg, *cloud);
@@ -135,4 +142,10 @@ void PtCdProcessing::pointcloudCallback(const sensor_msgs::PointCloud2::ConstPtr
   sensor_msgs::PointCloud2 output_filtered;
   pcl_conversions::fromPCL(*filtered_cloud, output_filtered);
   filtered_pc_pub.publish(output_filtered);
+
+  auto callEnd = high_resolution_clock::now();
+
+  ROS_INFO("Callback execution time: %ld us",
+            duration_cast<microseconds>(callEnd - callStart).count());
+
 }

@@ -135,7 +135,7 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<line>& computed
   // first Hough transform
   Hough* hough;
   try {
-    hough = new Hough(minPshifted, maxPshifted, opt_dx, granularity);
+    hough = new Hough(minPshifted, maxPshifted, opt_dx);
   } catch (const std::exception &e) {
     
     ROS_INFO("ERROR - cannot allocate memory for %.0f Hough cells"
@@ -199,6 +199,14 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<line>& computed
       double t_max_test = find_t(a, b, find_proj(a, b, *it + X.shift), 1);
       if (t_max < t_max_test)
         t_max = t_max_test;
+
+      // Rviz markers points
+      Vector3d p_hough = *it + X.shift;
+      pcl::PointXYZ p_pcl;
+      p_pcl.x = p_hough.x;
+      p_pcl.y = p_hough.y;
+      p_pcl.z = p_hough.z;
+      pc_out.points.push_back(p_pcl);
       }
 
     Vector3d p1 = a + t_min*b;
@@ -208,18 +216,6 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<line>& computed
     l.p1 = p1;
     l.p2 = p2;
     computed_lines.push_back(l);
-
-
-    // Rviz markers points
-    for (std::vector<Vector3d>::iterator it = Y.points.begin(); it != Y.points.end(); it++)
-    {
-      Vector3d p_hough = *it + X.shift;
-      pcl::PointXYZ p_pcl;
-      p_pcl.x = p_hough.x;
-      p_pcl.y = p_hough.y;
-      p_pcl.z = p_hough.z;
-      pc_out.points.push_back(p_pcl);
-    }
 
     X.removePoints(Y);
 
