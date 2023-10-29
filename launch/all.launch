@@ -3,7 +3,7 @@
 <launch>
 
     <arg name="port"        default="1234" />       <!-- Port used by extern controllers with Webots, default: 1234 -->
-    <arg name="trajectory"  default="hover" />      <!-- Trajectory to follow -->
+    <arg name="trajectory"  default="eight" />      <!-- Trajectory to follow -->
     <arg name="imu_id"      default="1" />      <!-- IMU id to use -->
     <arg name="rviz_AP_pkg" default="false" /> <!-- Launch rviz in the Auto Pilot package -->
     <arg name="rviz" default="true" /> <!-- Launch rviz -->
