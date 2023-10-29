@@ -13,6 +13,8 @@ using Eigen::MatrixXf;
 struct line {
   Vector3d p1;
   Vector3d p2;
+  Vector3d a;
+  Vector3d b;
   double radius;
 };
 
@@ -226,6 +228,8 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<line>& computed
       line l;
       l.p1 = p1;
       l.p2 = p2;
+      l.a = a;
+      l.b = b;
       l.radius = radius;
 
       computed_lines.push_back(l);

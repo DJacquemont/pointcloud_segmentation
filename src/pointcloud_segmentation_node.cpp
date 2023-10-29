@@ -169,26 +169,46 @@ void PtCdProcessing::drone2WorldLines(std::vector<line>& drone_lines){
   Eigen::Matrix3d rotation_matrix = q.toRotationMatrix();
 
   for (const line& computed_line : drone_lines) {
-    line world_line;
 
-    // Transform the first endpoint
-    Eigen::Vector3d drone_point1(computed_line.p1.x, computed_line.p1.y, computed_line.p1.z);
-    Eigen::Vector3d world_point1 = rotation_matrix * drone_point1 + Eigen::Vector3d(drone_position.x, drone_position.y, drone_position.z);
-    world_line.p1.x = world_point1.x();
-    world_line.p1.y = world_point1.y();
-    world_line.p1.z = world_point1.z();
+    bool lineExists = false;
 
-    // Transform the second endpoint
-    Eigen::Vector3d drone_point2(computed_line.p2.x, computed_line.p2.y, computed_line.p2.z);
-    Eigen::Vector3d world_point2 = rotation_matrix * drone_point2 + Eigen::Vector3d(drone_position.x, drone_position.y, drone_position.z);
-    world_line.p2.x = world_point2.x();
-    world_line.p2.y = world_point2.y();
-    world_line.p2.z = world_point2.z();
+    for (const line& existing_line : world_lines) {
+      // Define a tolerance for considering lines as equal
+      double tolerance_point = 0.6;
+      double tolerance_slope_a = 1;
+      double tolerance_slope_b = 1;
 
-    world_line.radius = computed_line.radius;
+      // Check if the endpoints and radius are sufficiently close
+      if ((computed_line.p1.isApprox(existing_line.p1, tolerance_point) && computed_line.p2.isApprox(existing_line.p2, tolerance_point)) ||
+          (computed_line.p1.isApprox(existing_line.p2, tolerance_point) && computed_line.p2.isApprox(existing_line.p1, tolerance_point)) ||
+          (computed_line.a.isApprox(existing_line.a, tolerance_slope_a) && computed_line.b.isApprox(existing_line.b, tolerance_slope_b))) {
+        lineExists = true;
+        break;
+      }
+    }
 
-    // Add the transformed line to the world_lines vector
-    world_lines.push_back(world_line);
+    if (!lineExists) {
+      line world_line;
+
+      // Transform the first endpoint
+      Eigen::Vector3d drone_point1(computed_line.p1.x, computed_line.p1.y, computed_line.p1.z);
+      Eigen::Vector3d world_point1 = rotation_matrix * drone_point1 + Eigen::Vector3d(drone_position.x, drone_position.y, drone_position.z);
+      world_line.p1.x = world_point1.x();
+      world_line.p1.y = world_point1.y();
+      world_line.p1.z = world_point1.z();
+
+      // Transform the second endpoint
+      Eigen::Vector3d drone_point2(computed_line.p2.x, computed_line.p2.y, computed_line.p2.z);
+      Eigen::Vector3d world_point2 = rotation_matrix * drone_point2 + Eigen::Vector3d(drone_position.x, drone_position.y, drone_position.z);
+      world_line.p2.x = world_point2.x();
+      world_line.p2.y = world_point2.y();
+      world_line.p2.z = world_point2.z();
+
+      world_line.radius = computed_line.radius;
+
+      // Add the transformed line to the world_lines vector
+      world_lines.push_back(world_line);
+    }
   }
 }
 
