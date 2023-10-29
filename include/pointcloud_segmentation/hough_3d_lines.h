@@ -29,13 +29,12 @@ double find_t(Vector3d a, Vector3d b, Vector3d p, bool mode){
   return t;
 }
 
-Vector3d find_proj(Vector3d a, Vector3d b, Vector3d p, double &max_dist){
+Vector3d find_proj(Vector3d a, Vector3d b, Vector3d p, std::vector<double> &point_dist){
   Vector3d p_A(a.x, a.y, a.z);
   Vector3d p_B(a.x+b.x, a.y+b.y, a.z+b.z);
   Vector3d p_proj = p_A + (((p-p_A)*(p_B-p_A))*(p_B-p_A))/((p_B-p_A)*(p_B-p_A));
 
-  double dist = (p_proj - p).norm();
-  max_dist = (dist > max_dist) ? dist : max_dist;
+  point_dist.push_back((p_proj - p).norm());
 
   return p_proj;
 }
@@ -192,13 +191,13 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<line>& computed
 
     
     // find t_min and t_max length of the line segment
-    double max_dist = 0.0;
-    Vector3d p_proj = find_proj(a, b, Y.points[0] + X.shift, max_dist);
+    std::vector<double> point_dist;
+    Vector3d p_proj = find_proj(a, b, Y.points[0] + X.shift, point_dist);
     double t_min = find_t(a, b, p_proj, 0);
     double t_max = find_t(a, b, p_proj, 1);
 
     for(std::vector<Vector3d>::iterator it = Y.points.begin(); it != Y.points.end(); it++){
-      Vector3d p_proj = find_proj(a, b, *it + X.shift, max_dist);
+      Vector3d p_proj = find_proj(a, b, *it + X.shift, point_dist);
       double t_min_test = find_t(a, b, p_proj, 0);
       if (t_min > t_min_test)
         t_min = t_min_test;
@@ -216,20 +215,22 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<line>& computed
       pc_out.points.push_back(p_pcl);
       }
 
-    // Filtering fake lines
-    if (max_dist > 0.05){
+    // find radius
+    double radius = double(std::accumulate(point_dist.begin(), point_dist.end(), 0.0)) / point_dist.size();
+    
+    // add line to vector
+    if (radius > 0.05){
       Vector3d p1 = a + t_min*b;
       Vector3d p2 = a + t_max*b;
 
       line l;
       l.p1 = p1;
       l.p2 = p2;
-      l.radius = max_dist;
+      l.radius = radius;
 
       computed_lines.push_back(l);
     }
     
-
     X.removePoints(Y);
 
   } while ((X.points.size() > 1) && 

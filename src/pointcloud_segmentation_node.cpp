@@ -144,7 +144,7 @@ void PtCdProcessing::cloudFiltering(pcl::PCLPointCloud2::Ptr& cloud, pcl::PointC
 
   pass.setInputCloud(filtered_cloud);
   pass.setFilterFieldName("z");
-  pass.setFilterLimits(1-drone_position.z, 1.0f);
+  pass.setFilterLimits(1.0f-drone_position.z, 1.0f);
   pass.filter(*filtered_cloud);
 
   pcl::VoxelGrid<pcl::PCLPointCloud2> voxel_grid;
@@ -152,8 +152,6 @@ void PtCdProcessing::cloudFiltering(pcl::PCLPointCloud2::Ptr& cloud, pcl::PointC
   voxel_grid.setLeafSize(0.1f, 0.1f, 0.1f);
   voxel_grid.filter(*filtered_cloud);
 
-  std::vector<line> drone_lines;
-  pcl::PointCloud<pcl::PointXYZ> pc_out;
   pcl::fromPCLPointCloud2(*filtered_cloud, *filtered_cloud_XYZ );
 
   // Publishing PCL filtered cloud
