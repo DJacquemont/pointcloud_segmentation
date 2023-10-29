@@ -131,14 +131,6 @@ Visualization Manager:
       Topic: /trajectory/path
       Unreliable: false
       Value: true
-    - Class: rviz/Marker
-      Enabled: true
-      Marker Topic: visualization_marker
-      Name: Marker
-      Namespaces:
-        points_and_lines: true
-      Queue Size: 100
-      Value: true
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
@@ -223,6 +215,14 @@ Visualization Manager:
       Use Fixed Frame: true
       Use rainbow: true
       Value: false
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Marker Topic: computed_lines
+      Name: MarkerArray
+      Namespaces:
+        cylinders: true
+      Queue Size: 100
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -251,7 +251,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 2.0991597175598145
+      Distance: 3.3030686378479004
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -288,4 +288,4 @@ Window Geometry:
     collapsed: true
   Width: 1048
   X: 48
-  Y: 90
+  Y: 53

@@ -4,6 +4,7 @@
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/filters/passthrough.h>
 #include <visualization_msgs/Marker.h>
+#include <visualization_msgs/MarkerArray.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <tf2/LinearMath/Quaternion.h>
 
@@ -21,7 +22,7 @@ public:
   {
     tof_pc_sub = node.subscribe("/tof_pc", 1, &PtCdProcessing::pointcloudCallback, this);
     pose_sub = node.subscribe("/mavros/local_position/pose", 1, &PtCdProcessing::poseCallback, this);
-    marker_pub = node.advertise<visualization_msgs::Marker>("visualization_marker", 1);
+    computed_lines_pub = node.advertise<visualization_msgs::MarkerArray>("computed_lines", 1);
     filtered_pc_pub = node.advertise<sensor_msgs::PointCloud2>("filtered_pointcloud", 1);
     hough_pc_pub = node.advertise<sensor_msgs::PointCloud2>("hough_pointcloud", 1);
   }
@@ -46,7 +47,7 @@ private:
 
   ros::Subscriber tof_pc_sub;
   ros::Subscriber pose_sub;
-  ros::Publisher marker_pub;
+  ros::Publisher computed_lines_pub;
   ros::Publisher filtered_pc_pub;
   ros::Publisher hough_pc_pub;
   
@@ -186,43 +187,65 @@ void PtCdProcessing::drone2WorldLines(std::vector<line>& drone_lines){
     world_line.p2.y = world_point2.y();
     world_line.p2.z = world_point2.z();
 
+    world_line.radius = computed_line.radius;
+
     // Add the transformed line to the world_lines vector
     world_lines.push_back(world_line);
   }
 }
 
+// Publish the computed lines as cylinders in RViz
+void PtCdProcessing::linesVisualization() {
+  // Create a marker array to hold the cylinders
+  visualization_msgs::MarkerArray markers;
 
-// Publish the computed lines in rviz
-void PtCdProcessing::linesVisualization(){
+  // Loop through the computed lines and create a cylinder for each line
+  for (size_t i = 0; i < world_lines.size(); i++) {
+    visualization_msgs::Marker cylinder;
 
-  // Rviz markers
-  visualization_msgs::Marker line_list;
-  line_list.header.frame_id = "mocap";
-  line_list.header.stamp = ros::Time::now();
-  line_list.ns = "points_and_lines";
-  line_list.action = visualization_msgs::Marker::ADD;
-  line_list.pose.orientation.w = 1.0;
-  line_list.type = visualization_msgs::Marker::LINE_LIST;
-  line_list.scale.x = 0.05;
-  line_list.scale.y = 0.05;
-  line_list.scale.z = 0.05;
-  line_list.color.r = 1.0;
-  line_list.color.a = 1.0;
+    // Set the marker properties for the cylinder
+    cylinder.header.frame_id = "mocap";
+    cylinder.header.stamp = ros::Time::now();
+    cylinder.ns = "cylinders";
+    cylinder.id = i;
+    cylinder.action = visualization_msgs::Marker::ADD;
+    cylinder.pose.orientation.w = 1.0;
+    cylinder.type = visualization_msgs::Marker::CYLINDER;
 
-  // Loop through the computed lines and add them to the marker list
-  for (size_t i = 0; i < world_lines.size(); i++)
-  {
-    geometry_msgs::Point p1, p2;
-    p1.x = world_lines[i].p1.x;
-    p1.y = world_lines[i].p1.y;
-    p1.z = world_lines[i].p1.z;
-    p2.x = world_lines[i].p2.x;
-    p2.y = world_lines[i].p2.y;
-    p2.z = world_lines[i].p2.z;
-    line_list.points.push_back(p1);
-    line_list.points.push_back(p2);
+    // Set the cylinder's position (midpoint between p1 and p2)
+    cylinder.pose.position.x = (world_lines[i].p1.x + world_lines[i].p2.x) / 2.0;
+    cylinder.pose.position.y = (world_lines[i].p1.y + world_lines[i].p2.y) / 2.0;
+    cylinder.pose.position.z = (world_lines[i].p1.z + world_lines[i].p2.z) / 2.0;
+
+    // Set the cylinder's orientation
+    Eigen::Vector3d direction(world_lines[i].p2.x - world_lines[i].p1.x,
+                              world_lines[i].p2.y - world_lines[i].p1.y,
+                              world_lines[i].p2.z - world_lines[i].p1.z);
+    direction.normalize();
+    Eigen::Quaterniond q;
+    q.setFromTwoVectors(Eigen::Vector3d(0, 0, 1), direction);
+    cylinder.pose.orientation.x = q.x();
+    cylinder.pose.orientation.y = q.y();
+    cylinder.pose.orientation.z = q.z();
+    cylinder.pose.orientation.w = q.w();
+
+    // Set the cylinder's scale (height and radius)
+    double cylinder_height = (world_lines[i].p2 - world_lines[i].p1).norm();
+    double cylinder_radius = world_lines[i].radius;
+    cylinder.scale.x = cylinder_radius * 2.0;
+    cylinder.scale.y = cylinder_radius * 2.0;
+    cylinder.scale.z = cylinder_height;
+
+    // Set the cylinder's color and transparency
+    cylinder.color.r = 1.0;
+    cylinder.color.g = 0.0;
+    cylinder.color.b = 0.0;
+    cylinder.color.a = 1.0;
+
+    // Add the cylinder marker to the marker array
+    markers.markers.push_back(cylinder);
   }
 
-  // Publishing line Hough
-  marker_pub.publish(line_list);
+  // Publish the marker array containing the cylinders
+  computed_lines_pub.publish(markers);
 }

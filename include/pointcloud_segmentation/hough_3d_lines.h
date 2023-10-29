@@ -13,6 +13,7 @@ using Eigen::MatrixXf;
 struct line {
   Vector3d p1;
   Vector3d p2;
+  double radius;
 };
 
 double find_t(Vector3d a, Vector3d b, Vector3d p, bool mode){
@@ -28,10 +29,14 @@ double find_t(Vector3d a, Vector3d b, Vector3d p, bool mode){
   return t;
 }
 
-Vector3d find_proj(Vector3d a, Vector3d b, Vector3d p){
+Vector3d find_proj(Vector3d a, Vector3d b, Vector3d p, double &max_dist){
   Vector3d p_A(a.x, a.y, a.z);
   Vector3d p_B(a.x+b.x, a.y+b.y, a.z+b.z);
   Vector3d p_proj = p_A + (((p-p_A)*(p_B-p_A))*(p_B-p_A))/((p_B-p_A)*(p_B-p_A));
+
+  double dist = (p_proj - p).norm();
+  max_dist = (dist > max_dist) ? dist : max_dist;
+
   return p_proj;
 }
 
@@ -187,16 +192,18 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<line>& computed
 
     
     // find t_min and t_max length of the line segment
-    Vector3d p_proj = find_proj(a, b, Y.points[0] + X.shift);
+    double max_dist = 0.0;
+    Vector3d p_proj = find_proj(a, b, Y.points[0] + X.shift, max_dist);
     double t_min = find_t(a, b, p_proj, 0);
     double t_max = find_t(a, b, p_proj, 1);
 
     for(std::vector<Vector3d>::iterator it = Y.points.begin(); it != Y.points.end(); it++){
-      double t_min_test = find_t(a, b, find_proj(a, b, *it + X.shift), 0);
+      Vector3d p_proj = find_proj(a, b, *it + X.shift, max_dist);
+      double t_min_test = find_t(a, b, p_proj, 0);
       if (t_min > t_min_test)
         t_min = t_min_test;
 
-      double t_max_test = find_t(a, b, find_proj(a, b, *it + X.shift), 1);
+      double t_max_test = find_t(a, b, p_proj, 1);
       if (t_max < t_max_test)
         t_max = t_max_test;
 
@@ -209,13 +216,19 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<line>& computed
       pc_out.points.push_back(p_pcl);
       }
 
-    Vector3d p1 = a + t_min*b;
-    Vector3d p2 = a + t_max*b;
+    // Filtering fake lines
+    if (max_dist > 0.05){
+      Vector3d p1 = a + t_min*b;
+      Vector3d p2 = a + t_max*b;
 
-    line l;
-    l.p1 = p1;
-    l.p2 = p2;
-    computed_lines.push_back(l);
+      line l;
+      l.p1 = p1;
+      l.p2 = p2;
+      l.radius = max_dist;
+
+      computed_lines.push_back(l);
+    }
+    
 
     X.removePoints(Y);
 
