@@ -11,32 +11,45 @@
 using Eigen::MatrixXf;
 
 struct line {
-  Vector3d p1;
-  Vector3d p2;
-  Vector3d a;
-  Vector3d b;
+  Eigen::Vector3d p1;
+  Eigen::Vector3d p2;
+  Eigen::Vector3d a;
+  Eigen::Vector3d b;
+  double t_min;
+  double t_max;
   double radius;
+  std::vector<Eigen::Vector3d> points;
 };
 
-double find_t(Vector3d a, Vector3d b, Vector3d p, bool mode){
-  double t;
-  double t1 = (p.x - a.x) / b.x;
-  double t2 = (p.y - a.y) / b.y;
-  double t3 = (p.z - a.z) / b.z;
+void find_t(Eigen::Vector3d a, Eigen::Vector3d b, Eigen::Vector3d p, std::vector<double>& t_value, std::vector<double>& p_norm){
 
-  if (mode)
-    t = std::max(std::max(t1, t2), t3);
-  else
-    t = std::min(std::min(t1, t2), t3);
-  return t;
+  // t is similar for x, y and z
+  double t = (p.x() - a.x()) / b.x();
+
+  if (t_value.empty()){
+    t_value.push_back(t);
+    p_norm.push_back((a + t * b).norm());
+
+  } else {
+    // Find the appropriate index to insert t while keeping the vector sorted
+    auto it = std::upper_bound(t_value.begin(), t_value.end(), t);
+
+    // Calculate the index at which t should be inserted
+    int index = std::distance(t_value.begin(), it);
+
+    // Insert t at the calculated index
+    t_value.insert(it, t);
+
+    // Calculate the norm of p corresponding to t and insert it at the same index
+    p_norm.insert(p_norm.begin() + index, (a + t * b).norm());
+  }
 }
 
-Vector3d find_proj(Vector3d a, Vector3d b, Vector3d p, std::vector<double> &point_dist){
-  Vector3d p_A(a.x, a.y, a.z);
-  Vector3d p_B(a.x+b.x, a.y+b.y, a.z+b.z);
-  Vector3d p_proj = p_A + (((p-p_A)*(p_B-p_A))*(p_B-p_A))/((p_B-p_A)*(p_B-p_A));
+Eigen::Vector3d find_proj(Eigen::Vector3d a, Eigen::Vector3d b, Eigen::Vector3d p){
 
-  point_dist.push_back((p_proj - p).norm());
+  Eigen::Vector3d p_A(a);
+  Eigen::Vector3d p_B(a+b);
+  Eigen::Vector3d p_proj = p_A + (p_B-p_A)*((p-p_A).transpose()*(p_B-p_A))/((p_B-p_A).transpose()*(p_B-p_A));
 
   return p_proj;
 }
@@ -74,7 +87,7 @@ double orthogonal_LSQ(const PointCloud &pc, Vector3d* a, Vector3d* b){
 }
 
 // Method computing 3d lines with the Hough transform
-int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<line>& computed_lines, pcl::PointCloud<pcl::PointXYZ> &pc_out){
+int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<line>& computed_lines){
 
   PointCloud X;
   Vector3d point;
@@ -191,46 +204,51 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<line>& computed
       ROS_INFO("npoints=%lu, a=(%f,%f,%f), b=(%f,%f,%f)",
                 Y.points.size(), a.x, a.y, a.z, b.x, b.y, b.z);
 
+    // find t of the line segment, and the corresponding norm of p
+    std::vector<double> p_radius;
+    std::vector<double> p_norm;
+    std::vector<double> t_value;
+    std::vector<Eigen::Vector3d> points;
+    Eigen::Vector3d a_eigen(a.x, a.y, a.z);
+    Eigen::Vector3d b_eigen(b.x, b.y, b.z);
     
-    // find t_min and t_max length of the line segment
-    std::vector<double> point_dist;
-    Vector3d p_proj = find_proj(a, b, Y.points[0] + X.shift, point_dist);
-    double t_min = find_t(a, b, p_proj, 0);
-    double t_max = find_t(a, b, p_proj, 1);
-
     for(std::vector<Vector3d>::iterator it = Y.points.begin(); it != Y.points.end(); it++){
-      Vector3d p_proj = find_proj(a, b, *it + X.shift, point_dist);
-      double t_min_test = find_t(a, b, p_proj, 0);
-      if (t_min > t_min_test)
-        t_min = t_min_test;
+      
+      Vector3d point = *it + X.shift;
+      Eigen::Vector3d point_eigen(point.x, point.y, point.z);
+      Eigen::Vector3d p_proj = find_proj(a_eigen, b_eigen, point_eigen);
+      p_radius.push_back((p_proj - point_eigen).norm());
+      find_t(a_eigen, b_eigen, p_proj, t_value, p_norm);
 
-      double t_max_test = find_t(a, b, p_proj, 1);
-      if (t_max < t_max_test)
-        t_max = t_max_test;
-
-      // Rviz markers points
-      Vector3d p_hough = *it + X.shift;
-      pcl::PointXYZ p_pcl;
-      p_pcl.x = p_hough.x;
-      p_pcl.y = p_hough.y;
-      p_pcl.z = p_hough.z;
-      pc_out.points.push_back(p_pcl);
+      // saving points
+      points.push_back(point_eigen);
       }
 
-    // find radius
-    double radius = double(std::accumulate(point_dist.begin(), point_dist.end(), 0.0)) / point_dist.size();
-    
+    std::sort(p_radius.begin(), p_radius.end());
+    double radius = p_radius[round(9*p_radius.size()/10)];
+
+    double maxDifference = std::abs(p_norm[1] - p_norm[0]);
+    for (size_t i = 1; i < p_norm.size() - 1; ++i) {
+        double difference = std::abs(p_norm[i + 1] - p_norm[i]);
+        if (difference > maxDifference)
+            maxDifference = difference;
+    }
+
     // add line to vector
-    if (radius > 0.05){
-      Vector3d p1 = a + t_min*b;
-      Vector3d p2 = a + t_max*b;
+    if (radius > 0.05 && maxDifference < 0.2){
+
+      Eigen::Vector3d p1 = a_eigen + t_value[0]*b_eigen;
+      Eigen::Vector3d p2 = a_eigen + t_value[t_value.size()-1]*b_eigen;
 
       line l;
       l.p1 = p1;
       l.p2 = p2;
-      l.a = a;
-      l.b = b;
+      l.a = a_eigen;
+      l.b = b_eigen;
+      l.t_min = t_value[0];
+      l.t_max = t_value[t_value.size()-1];
       l.radius = radius;
+      l.points = points;
 
       computed_lines.push_back(l);
     }

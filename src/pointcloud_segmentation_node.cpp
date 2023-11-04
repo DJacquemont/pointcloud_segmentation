@@ -39,8 +39,8 @@ public:
   // Transform the lines from the drone's frame to the world frame
   void drone2WorldLines(std::vector<line>& drone_lines);
 
-  // Publish the computed lines in rviz
-  void linesVisualization();
+  // Publish the points used, and the computed lines as cylinders in RViz
+  void visualization();
 
 private:
   ros::NodeHandle node;
@@ -51,8 +51,8 @@ private:
   ros::Publisher filtered_pc_pub;
   ros::Publisher hough_pc_pub;
   
-  geometry_msgs::Point drone_position;
-  geometry_msgs::Quaternion drone_orientation;
+  Eigen::Vector3d drone_position;
+  Eigen::Quaterniond drone_orientation;
 
   std::vector<line> world_lines;
 };
@@ -83,8 +83,10 @@ int main(int argc, char *argv[])
 
 // Callback function receiving & storing the drone's pose from the Autopilot package
 void PtCdProcessing::poseCallback(const geometry_msgs::PoseStamped::ConstPtr& msg){
-  drone_position = msg->pose.position;
-  drone_orientation = msg->pose.orientation;
+  Eigen::Vector3d pose(msg->pose.position.x, msg->pose.position.y, msg->pose.position.z);
+  Eigen::Quaterniond orientation(msg->pose.orientation.w, msg->pose.orientation.x, msg->pose.orientation.y, msg->pose.orientation.z);
+  drone_position = pose;
+  drone_orientation = orientation;
 }
 
 // Callback function receiving & processing ToF images from the Autopilot packag
@@ -100,22 +102,13 @@ void PtCdProcessing::pointcloudCallback(const sensor_msgs::PointCloud2::ConstPtr
 
   // line extraction with the Hough transform
   std::vector<line> drone_lines;
-  pcl::PointCloud<pcl::PointXYZ> pc_out;
-  if (hough3dlines(*filtered_cloud_XYZ, drone_lines, pc_out))
+  if (hough3dlines(*filtered_cloud_XYZ, drone_lines))
     ROS_INFO("ERROR - Unable to perform the Hough transform");
-
-  // Publishing points used Hough
-  pcl::PCLPointCloud2::Ptr pts_hough (new pcl::PCLPointCloud2);
-  sensor_msgs::PointCloud2 output_hough;
-  pcl::toPCLPointCloud2(pc_out, *pts_hough);
-  pcl_conversions::fromPCL(*pts_hough, output_hough);
-  output_hough.header.frame_id = "world";
-  hough_pc_pub.publish(output_hough);
 
   // Transform the lines from the drone's frame to the world frame
   drone2WorldLines(drone_lines);
 
-  linesVisualization();
+  visualization();
 
   auto callEnd = high_resolution_clock::now();
   ROS_INFO("Callback execution time: %ld us",
@@ -144,7 +137,7 @@ void PtCdProcessing::cloudFiltering(pcl::PCLPointCloud2::Ptr& cloud, pcl::PointC
 
   pass.setInputCloud(filtered_cloud);
   pass.setFilterFieldName("z");
-  pass.setFilterLimits(1.0f-drone_position.z, 1.0f);
+  pass.setFilterLimits(1.0f-drone_position.z(), 1.0f);
   pass.filter(*filtered_cloud);
 
   pcl::VoxelGrid<pcl::PCLPointCloud2> voxel_grid;
@@ -165,45 +158,68 @@ void PtCdProcessing::cloudFiltering(pcl::PCLPointCloud2::Ptr& cloud, pcl::PointC
 void PtCdProcessing::drone2WorldLines(std::vector<line>& drone_lines){
 
   // Convert the quaternion to a rotation matrix
-  Eigen::Quaterniond q(drone_orientation.w, drone_orientation.x, drone_orientation.y, drone_orientation.z);
-  Eigen::Matrix3d rotation_matrix = q.toRotationMatrix();
+  Eigen::Matrix3d rotation_matrix = drone_orientation.toRotationMatrix();
+
+  // Tolerance for considering lines as equal
+  double tolerance_a = 0.5;
+  double tolerance_b = 0.5;
 
   for (const line& computed_line : drone_lines) {
-
     bool lineExists = false;
 
-    for (const line& existing_line : world_lines) {
-      // Define a tolerance for considering lines as equal
-      double tolerance_point = 0.6;
-      double tolerance_slope_a = 1;
-      double tolerance_slope_b = 1;
+    // Transform the line in the world frame
+    Eigen::Vector3d world_point1 = rotation_matrix * computed_line.p1 + drone_position;
+    Eigen::Vector3d world_point2 = rotation_matrix * computed_line.p2 + drone_position;
+    Eigen::Vector3d world_a = rotation_matrix * computed_line.a + drone_position;
+    Eigen::Vector3d world_b = rotation_matrix * computed_line.b;
 
+    for (std::vector<line>::iterator it = world_lines.begin(); it != world_lines.end(); it++)
+      
       // Check if the endpoints and radius are sufficiently close
-      if ((computed_line.p1.isApprox(existing_line.p1, tolerance_point) && computed_line.p2.isApprox(existing_line.p2, tolerance_point)) ||
-          (computed_line.p1.isApprox(existing_line.p2, tolerance_point) && computed_line.p2.isApprox(existing_line.p1, tolerance_point)) ||
-          (computed_line.a.isApprox(existing_line.a, tolerance_slope_a) && computed_line.b.isApprox(existing_line.b, tolerance_slope_b))) {
+      if (world_a.isApprox(it->a, tolerance_a) && 
+          world_b.isApprox(it->b, tolerance_b)) {
+
+        if ((computed_line.t_min > it->t_min) && 
+            (computed_line.t_max < it->t_max)) {
+          continue;
+
+        } else if ((computed_line.t_max < it->t_min) || 
+                   (computed_line.t_min > it->t_max)) {
+
+          line world_line;
+          world_line.p1 = world_point1;
+          world_line.p2 = world_point2;
+          world_line.a = world_a;
+          world_line.b = world_b;
+          world_line.t_min = computed_line.t_min;
+          world_line.t_max = computed_line.t_max;
+          world_line.radius = computed_line.radius;
+
+          // Add the transformed line to the world_lines vector
+          world_lines.push_back(world_line);
+          
+        } else {
+          double t_min = std::min(computed_line.t_min, it->t_min);
+          double t_max = std::max(computed_line.t_max, it->t_max);
+
+          it->p1 = world_a + t_min*world_b;
+          it->p2 = world_a + t_max*world_b;
+          it->t_min = t_min;
+          it->t_max = t_max;          
+        }
+
         lineExists = true;
         break;
       }
-    }
 
     if (!lineExists) {
       line world_line;
-
-      // Transform the first endpoint
-      Eigen::Vector3d drone_point1(computed_line.p1.x, computed_line.p1.y, computed_line.p1.z);
-      Eigen::Vector3d world_point1 = rotation_matrix * drone_point1 + Eigen::Vector3d(drone_position.x, drone_position.y, drone_position.z);
-      world_line.p1.x = world_point1.x();
-      world_line.p1.y = world_point1.y();
-      world_line.p1.z = world_point1.z();
-
-      // Transform the second endpoint
-      Eigen::Vector3d drone_point2(computed_line.p2.x, computed_line.p2.y, computed_line.p2.z);
-      Eigen::Vector3d world_point2 = rotation_matrix * drone_point2 + Eigen::Vector3d(drone_position.x, drone_position.y, drone_position.z);
-      world_line.p2.x = world_point2.x();
-      world_line.p2.y = world_point2.y();
-      world_line.p2.z = world_point2.z();
-
+      world_line.p1 = world_point1;
+      world_line.p2 = world_point2;
+      world_line.a = world_a;
+      world_line.b = world_b;
+      world_line.t_min = computed_line.t_min;
+      world_line.t_max = computed_line.t_max;
       world_line.radius = computed_line.radius;
 
       // Add the transformed line to the world_lines vector
@@ -212,13 +228,31 @@ void PtCdProcessing::drone2WorldLines(std::vector<line>& drone_lines){
   }
 }
 
-// Publish the computed lines as cylinders in RViz
-void PtCdProcessing::linesVisualization() {
+// Publish the points used, and the computed lines as cylinders in RViz
+void PtCdProcessing::visualization() {
+  // Create a pointcloud to hold the points used for Hough
+  sensor_msgs::PointCloud2 output_hough;
   // Create a marker array to hold the cylinders
   visualization_msgs::MarkerArray markers;
 
   // Loop through the computed lines and create a cylinder for each line
   for (size_t i = 0; i < world_lines.size(); i++) {
+
+    // Create a pointcloud to hold the points used for Hough
+    pcl::PointCloud<pcl::PointXYZ> pc_out;
+    for (const Eigen::Vector3d& point : world_lines[i].points){
+      pcl::PointXYZ p_pcl;
+      p_pcl.x = point.x();
+      p_pcl.y = point.y();
+      p_pcl.z = point.z();
+      pc_out.points.push_back(p_pcl);
+    }
+    // Publishing points used Hough
+    pcl::PCLPointCloud2::Ptr pts_hough (new pcl::PCLPointCloud2);
+    pcl::toPCLPointCloud2(pc_out, *pts_hough);
+    pcl_conversions::fromPCL(*pts_hough, output_hough);
+    output_hough.header.frame_id = "world";
+
     visualization_msgs::Marker cylinder;
 
     // Set the marker properties for the cylinder
@@ -231,14 +265,12 @@ void PtCdProcessing::linesVisualization() {
     cylinder.type = visualization_msgs::Marker::CYLINDER;
 
     // Set the cylinder's position (midpoint between p1 and p2)
-    cylinder.pose.position.x = (world_lines[i].p1.x + world_lines[i].p2.x) / 2.0;
-    cylinder.pose.position.y = (world_lines[i].p1.y + world_lines[i].p2.y) / 2.0;
-    cylinder.pose.position.z = (world_lines[i].p1.z + world_lines[i].p2.z) / 2.0;
+    cylinder.pose.position.x = (world_lines[i].p1.x() + world_lines[i].p2.x()) / 2.0;
+    cylinder.pose.position.y = (world_lines[i].p1.y() + world_lines[i].p2.y()) / 2.0;
+    cylinder.pose.position.z = (world_lines[i].p1.z() + world_lines[i].p2.z()) / 2.0;
 
     // Set the cylinder's orientation
-    Eigen::Vector3d direction(world_lines[i].p2.x - world_lines[i].p1.x,
-                              world_lines[i].p2.y - world_lines[i].p1.y,
-                              world_lines[i].p2.z - world_lines[i].p1.z);
+    Eigen::Vector3d direction(world_lines[i].p2 - world_lines[i].p1);
     direction.normalize();
     Eigen::Quaterniond q;
     q.setFromTwoVectors(Eigen::Vector3d(0, 0, 1), direction);
@@ -263,6 +295,9 @@ void PtCdProcessing::linesVisualization() {
     // Add the cylinder marker to the marker array
     markers.markers.push_back(cylinder);
   }
+
+  // Publishing points used Hough
+  hough_pc_pub.publish(output_hough);
 
   // Publish the marker array containing the cylinders
   computed_lines_pub.publish(markers);
