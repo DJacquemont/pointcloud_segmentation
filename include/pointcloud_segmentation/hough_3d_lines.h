@@ -11,12 +11,9 @@
 using Eigen::MatrixXf;
 
 struct line {
-  Eigen::Vector3d p1;
-  Eigen::Vector3d p2;
-  Eigen::Vector3d a;
-  Eigen::Vector3d b;
-  double t_min;
-  double t_max;
+  Eigen::Vector3d p1, p2;
+  Eigen::Vector3d a, b;
+  double t_min, t_max;
   double radius;
   std::vector<Eigen::Vector3d> points;
 };

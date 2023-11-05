@@ -161,69 +161,130 @@ void PtCdProcessing::drone2WorldLines(std::vector<line>& drone_lines){
   Eigen::Matrix3d rotation_matrix = drone_orientation.toRotationMatrix();
 
   // Tolerance for considering lines as equal
-  double tolerance_a = 0.5;
-  double tolerance_b = 0.5;
+  double tolerance = 1.5;
+  // double tolerance_b = 0.5;
 
   for (const line& computed_line : drone_lines) {
     bool lineExists = false;
 
     // Transform the line in the world frame
-    Eigen::Vector3d world_point1 = rotation_matrix * computed_line.p1 + drone_position;
-    Eigen::Vector3d world_point2 = rotation_matrix * computed_line.p2 + drone_position;
-    Eigen::Vector3d world_a = rotation_matrix * computed_line.a + drone_position;
-    Eigen::Vector3d world_b = rotation_matrix * computed_line.b;
+    line test_line;
+    test_line.p1 = rotation_matrix * computed_line.p1 + drone_position;
+    test_line.p2 = rotation_matrix * computed_line.p2 + drone_position;
+    test_line.a = rotation_matrix * computed_line.a + drone_position;
+    test_line.b = rotation_matrix * computed_line.b;
+    test_line.t_min = computed_line.t_min;
+    test_line.t_max = computed_line.t_max;
+    test_line.radius = computed_line.radius;
 
-    for (std::vector<line>::iterator it = world_lines.begin(); it != world_lines.end(); it++)
-      
-      // Check if the endpoints and radius are sufficiently close
-      if (world_a.isApprox(it->a, tolerance_a) && 
-          world_b.isApprox(it->b, tolerance_b)) {
+    for (line& existing_line : world_lines) {
 
-        if ((computed_line.t_min > it->t_min) && 
-            (computed_line.t_max < it->t_max)) {
-          continue;
+      // Find maximum comparison length
+      // Eigen::Vector3d test_p1 = find_proj(existing_line.a, existing_line.b, test_line.p1);
+      // Eigen::Vector3d test_p2 = find_proj(existing_line.a, existing_line.b, test_line.p2);
+      // double test_tmin_l1 = (test_p1.x() - existing_line.a.x()) / existing_line.b.x();
+      // double test_tmax_l1 = (test_p2.x() - existing_line.a.x()) / existing_line.b.x();
+      // test_tmin_l1 = (test_tmin_l1 < existing_line.t_min) ? test_tmin_l1 : existing_line.t_min;
+      // test_tmax_l1 = (test_tmax_l1 > existing_line.t_max) ? test_tmax_l1 : existing_line.t_min;
 
-        } else if ((computed_line.t_max < it->t_min) || 
-                   (computed_line.t_min > it->t_max)) {
+      // std::vector<double> dist_seg;
+      // double incr_l1 = (test_tmax_l1 - test_tmin_l1) / 10.0;
+      // for (size_t i = 0; i < 10; i++){
+      //   Eigen::Vector3d P = existing_line.b * (test_tmin_l1 + incr_l1 * i) + existing_line.a;
+      //   double d = existing_line.b.dot(P);
+      //   double dotProduct = -existing_line.b.dot(test_line.b);
+      //   if (std::abs(dotProduct) > 1e-6) {
+      //     double t = (existing_line.b.dot(test_line.b) - d) / dotProduct;
+      //     Eigen::Vector3d Q = test_line.b * t + test_line.a;
+      //     dist_seg.push_back((P - Q).norm());
+      //     // printf("dist: %f\n", (P - Q).norm());
+      //   } else {
+      //     break;
+      //   }
+      // }
 
-          line world_line;
-          world_line.p1 = world_point1;
-          world_line.p2 = world_point2;
-          world_line.a = world_a;
-          world_line.b = world_b;
-          world_line.t_min = computed_line.t_min;
-          world_line.t_max = computed_line.t_max;
-          world_line.radius = computed_line.radius;
+      // double mean_dist_seg = std::accumulate(dist_seg.begin(), dist_seg.end(), 0.0) / dist_seg.size();
 
-          // Add the transformed line to the world_lines vector
-          world_lines.push_back(world_line);
-          
-        } else {
-          double t_min = std::min(computed_line.t_min, it->t_min);
-          double t_max = std::max(computed_line.t_max, it->t_max);
+      double dotProduct = test_line.b.dot(existing_line.b)/(test_line.b.norm() * existing_line.b.norm());
+      double t_mid_l1 = (test_line.t_max + test_line.t_min) / 2.0 + test_line.t_min;
+      double t_mid_l2 = (existing_line.t_max + existing_line.t_min) / 2.0 + existing_line.t_min;
+      Eigen::Vector3d dist_seg = (test_line.b * t_mid_l1 + test_line.a) - (existing_line.b * t_mid_l2 + existing_line.a);
 
-          it->p1 = world_a + t_min*world_b;
-          it->p2 = world_a + t_max*world_b;
-          it->t_min = t_min;
-          it->t_max = t_max;          
+
+      if ((std::abs(dotProduct) > 0.8) && (dist_seg.norm() < tolerance)) {
+      // if ((std::abs(dotProduct) > 0.8) && (mean_dist_seg < tolerance)) {
+        Eigen::Vector3d test_p1 = find_proj(existing_line.a, existing_line.b, test_line.p1);
+        Eigen::Vector3d test_p2 = find_proj(existing_line.a, existing_line.b, test_line.p2);
+        double test_tmin_l1 = (test_p1.x() - existing_line.a.x()) / existing_line.b.x();
+        double test_tmax_l1 = (test_p2.x() - existing_line.a.x()) / existing_line.b.x();
+
+        if (test_tmin_l1 < existing_line.t_min){
+          existing_line.t_min = test_tmin_l1;
+          existing_line.p1 = test_p1;
         }
-
+        if (test_tmax_l1 > existing_line.t_max){
+          existing_line.t_max = test_tmax_l1;
+          existing_line.p2 = test_p2;
+        }
         lineExists = true;
         break;
       }
 
+
+
+
+
+      
+      // // Check if the endpoints and radius are sufficiently close
+      // if (world_a.isApprox(it->a, tolerance_a) && 
+      //     world_b.isApprox(it->b, tolerance_b)) {
+
+      //   if ((computed_line.t_min > it->t_min) && 
+      //       (computed_line.t_max < it->t_max)) {
+      //     continue;
+
+      //   } else if ((computed_line.t_max < it->t_min) || 
+      //              (computed_line.t_min > it->t_max)) {
+
+      //     line world_line;
+      //     world_line.p1 = world_point1;
+      //     world_line.p2 = world_point2;
+      //     world_line.a = world_a;
+      //     world_line.b = world_b;
+      //     world_line.t_min = computed_line.t_min;
+      //     world_line.t_max = computed_line.t_max;
+      //     world_line.radius = computed_line.radius;
+
+      //     // Add the transformed line to the world_lines vector
+      //     world_lines.push_back(world_line);
+          
+      //   } else {
+      //     double t_min = std::min(computed_line.t_min, it->t_min);
+      //     double t_max = std::max(computed_line.t_max, it->t_max);
+
+      //     it->p1 = world_a + t_min*world_b;
+      //     it->p2 = world_a + t_max*world_b;
+      //     it->t_min = t_min;
+      //     it->t_max = t_max;          
+      //   }
+
+      //   lineExists = true;
+      //   break;
+      // }
+    } 
+    
     if (!lineExists) {
-      line world_line;
-      world_line.p1 = world_point1;
-      world_line.p2 = world_point2;
-      world_line.a = world_a;
-      world_line.b = world_b;
-      world_line.t_min = computed_line.t_min;
-      world_line.t_max = computed_line.t_max;
-      world_line.radius = computed_line.radius;
+      // line world_line;
+      // world_line.p1 = world_point1;
+      // world_line.p2 = world_point2;
+      // world_line.a = world_a;
+      // world_line.b = world_b;
+      // world_line.t_min = computed_line.t_min;
+      // world_line.t_max = computed_line.t_max;
+      // world_line.radius = computed_line.radius;
 
       // Add the transformed line to the world_lines vector
-      world_lines.push_back(world_line);
+      world_lines.push_back(test_line);
     }
   }
 }
