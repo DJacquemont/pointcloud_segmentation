@@ -161,8 +161,7 @@ void PtCdProcessing::drone2WorldLines(std::vector<line>& drone_lines){
   Eigen::Matrix3d rotation_matrix = drone_orientation.toRotationMatrix();
 
   // Tolerance for considering lines as equal
-  double tolerance = 1.5;
-  // double tolerance_b = 0.5;
+  double tolerance = 0.5;
 
   for (const line& computed_line : drone_lines) {
     bool lineExists = false;
@@ -177,44 +176,16 @@ void PtCdProcessing::drone2WorldLines(std::vector<line>& drone_lines){
     test_line.t_max = computed_line.t_max;
     test_line.radius = computed_line.radius;
 
+    for (const Eigen::Vector3d& point : computed_line.points){
+      test_line.points.push_back(rotation_matrix * point + drone_position);
+    }
+
     for (line& existing_line : world_lines) {
+      Eigen::Vector3d test_p1 = find_proj(existing_line.a, existing_line.b, test_line.p1);
+      Eigen::Vector3d test_p2 = find_proj(existing_line.a, existing_line.b, test_line.p2);
 
-      // Find maximum comparison length
-      // Eigen::Vector3d test_p1 = find_proj(existing_line.a, existing_line.b, test_line.p1);
-      // Eigen::Vector3d test_p2 = find_proj(existing_line.a, existing_line.b, test_line.p2);
-      // double test_tmin_l1 = (test_p1.x() - existing_line.a.x()) / existing_line.b.x();
-      // double test_tmax_l1 = (test_p2.x() - existing_line.a.x()) / existing_line.b.x();
-      // test_tmin_l1 = (test_tmin_l1 < existing_line.t_min) ? test_tmin_l1 : existing_line.t_min;
-      // test_tmax_l1 = (test_tmax_l1 > existing_line.t_max) ? test_tmax_l1 : existing_line.t_min;
-
-      // std::vector<double> dist_seg;
-      // double incr_l1 = (test_tmax_l1 - test_tmin_l1) / 10.0;
-      // for (size_t i = 0; i < 10; i++){
-      //   Eigen::Vector3d P = existing_line.b * (test_tmin_l1 + incr_l1 * i) + existing_line.a;
-      //   double d = existing_line.b.dot(P);
-      //   double dotProduct = -existing_line.b.dot(test_line.b);
-      //   if (std::abs(dotProduct) > 1e-6) {
-      //     double t = (existing_line.b.dot(test_line.b) - d) / dotProduct;
-      //     Eigen::Vector3d Q = test_line.b * t + test_line.a;
-      //     dist_seg.push_back((P - Q).norm());
-      //     // printf("dist: %f\n", (P - Q).norm());
-      //   } else {
-      //     break;
-      //   }
-      // }
-
-      // double mean_dist_seg = std::accumulate(dist_seg.begin(), dist_seg.end(), 0.0) / dist_seg.size();
-
-      double dotProduct = test_line.b.dot(existing_line.b)/(test_line.b.norm() * existing_line.b.norm());
-      double t_mid_l1 = (test_line.t_max + test_line.t_min) / 2.0 + test_line.t_min;
-      double t_mid_l2 = (existing_line.t_max + existing_line.t_min) / 2.0 + existing_line.t_min;
-      Eigen::Vector3d dist_seg = (test_line.b * t_mid_l1 + test_line.a) - (existing_line.b * t_mid_l2 + existing_line.a);
-
-
-      if ((std::abs(dotProduct) > 0.8) && (dist_seg.norm() < tolerance)) {
-      // if ((std::abs(dotProduct) > 0.8) && (mean_dist_seg < tolerance)) {
-        Eigen::Vector3d test_p1 = find_proj(existing_line.a, existing_line.b, test_line.p1);
-        Eigen::Vector3d test_p2 = find_proj(existing_line.a, existing_line.b, test_line.p2);
+      if (((test_p1-test_line.p1).norm() < tolerance) && ((test_p2-test_line.p2).norm() < tolerance)) {
+        
         double test_tmin_l1 = (test_p1.x() - existing_line.a.x()) / existing_line.b.x();
         double test_tmax_l1 = (test_p2.x() - existing_line.a.x()) / existing_line.b.x();
 
@@ -226,64 +197,19 @@ void PtCdProcessing::drone2WorldLines(std::vector<line>& drone_lines){
           existing_line.t_max = test_tmax_l1;
           existing_line.p2 = test_p2;
         }
+        
+        double coef_learn = 0.1;
+        // existing_line.a = (1-coef_learn)*existing_line.a + coef_learn*test_line.a;
+        // existing_line.b = (1-coef_learn)*existing_line.b + coef_learn*test_line.b;
+        existing_line.radius = (1-coef_learn)*existing_line.radius + coef_learn*test_line.radius;
+        existing_line.points = test_line.points;
+
         lineExists = true;
         break;
       }
-
-
-
-
-
-      
-      // // Check if the endpoints and radius are sufficiently close
-      // if (world_a.isApprox(it->a, tolerance_a) && 
-      //     world_b.isApprox(it->b, tolerance_b)) {
-
-      //   if ((computed_line.t_min > it->t_min) && 
-      //       (computed_line.t_max < it->t_max)) {
-      //     continue;
-
-      //   } else if ((computed_line.t_max < it->t_min) || 
-      //              (computed_line.t_min > it->t_max)) {
-
-      //     line world_line;
-      //     world_line.p1 = world_point1;
-      //     world_line.p2 = world_point2;
-      //     world_line.a = world_a;
-      //     world_line.b = world_b;
-      //     world_line.t_min = computed_line.t_min;
-      //     world_line.t_max = computed_line.t_max;
-      //     world_line.radius = computed_line.radius;
-
-      //     // Add the transformed line to the world_lines vector
-      //     world_lines.push_back(world_line);
-          
-      //   } else {
-      //     double t_min = std::min(computed_line.t_min, it->t_min);
-      //     double t_max = std::max(computed_line.t_max, it->t_max);
-
-      //     it->p1 = world_a + t_min*world_b;
-      //     it->p2 = world_a + t_max*world_b;
-      //     it->t_min = t_min;
-      //     it->t_max = t_max;          
-      //   }
-
-      //   lineExists = true;
-      //   break;
-      // }
     } 
     
     if (!lineExists) {
-      // line world_line;
-      // world_line.p1 = world_point1;
-      // world_line.p2 = world_point2;
-      // world_line.a = world_a;
-      // world_line.b = world_b;
-      // world_line.t_min = computed_line.t_min;
-      // world_line.t_max = computed_line.t_max;
-      // world_line.radius = computed_line.radius;
-
-      // Add the transformed line to the world_lines vector
       world_lines.push_back(test_line);
     }
   }
@@ -293,27 +219,22 @@ void PtCdProcessing::drone2WorldLines(std::vector<line>& drone_lines){
 void PtCdProcessing::visualization() {
   // Create a pointcloud to hold the points used for Hough
   sensor_msgs::PointCloud2 output_hough;
+  pcl::PointCloud<pcl::PointXYZ> pc_out;
   // Create a marker array to hold the cylinders
   visualization_msgs::MarkerArray markers;
+    
 
   // Loop through the computed lines and create a cylinder for each line
   for (size_t i = 0; i < world_lines.size(); i++) {
-
-    // Create a pointcloud to hold the points used for Hough
-    pcl::PointCloud<pcl::PointXYZ> pc_out;
     for (const Eigen::Vector3d& point : world_lines[i].points){
       pcl::PointXYZ p_pcl;
       p_pcl.x = point.x();
       p_pcl.y = point.y();
       p_pcl.z = point.z();
+
       pc_out.points.push_back(p_pcl);
     }
-    // Publishing points used Hough
-    pcl::PCLPointCloud2::Ptr pts_hough (new pcl::PCLPointCloud2);
-    pcl::toPCLPointCloud2(pc_out, *pts_hough);
-    pcl_conversions::fromPCL(*pts_hough, output_hough);
-    output_hough.header.frame_id = "world";
-
+    
     visualization_msgs::Marker cylinder;
 
     // Set the marker properties for the cylinder
@@ -358,6 +279,10 @@ void PtCdProcessing::visualization() {
   }
 
   // Publishing points used Hough
+  pcl::PCLPointCloud2::Ptr pts_hough (new pcl::PCLPointCloud2);
+  pcl::toPCLPointCloud2(pc_out, *pts_hough);
+  pcl_conversions::fromPCL(*pts_hough, output_hough);
+  output_hough.header.frame_id = "mocap";
   hough_pc_pub.publish(output_hough);
 
   // Publish the marker array containing the cylinders
