@@ -9,8 +9,8 @@ WorldInfo {
   basicTimeStep 8
 }
 Viewpoint {
-  orientation -0.14355114014087642 0.19394045064454893 0.9704535907337577 1.1829960683853897
-  position -1.3945299133458033 -9.789148582811825 2.100567205103647
+  orientation -0.2582002381789126 0.21536788372866958 0.9417798636956448 1.5455937742213333
+  position -0.6889999682164267 -15.754193302558006 8.67602787889071
 }
 Background {
   skyColor [
@@ -151,7 +151,7 @@ Solid {
   boundingObject USE SHAPE_CYL
 }
 Solid {
-  translation -0.993516 -1.25581 1.68059
+  translation -1.78053 -1.78285 0.732776
   rotation -0.5081508748422008 0.8521297901200324 0.1251299691804298 0.791712
   children [
     DEF SHAPE_CYL Shape {
@@ -164,6 +164,22 @@ Solid {
     }
   ]
   name "solid(4)"
+  boundingObject USE SHAPE_CYL
+}
+Solid {
+  translation -0.270861 -0.772046 2.55052
+  rotation -0.5081508748422008 0.8521297901200324 0.1251299691804298 0.791712
+  children [
+    DEF SHAPE_CYL Shape {
+      appearance PBRAppearance {
+        metalness 0
+      }
+      geometry Cylinder {
+        radius 0.1
+      }
+    }
+  ]
+  name "solid(10)"
   boundingObject USE SHAPE_CYL
 }
 Solid {

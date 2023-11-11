@@ -185,27 +185,53 @@ void PtCdProcessing::drone2WorldLines(std::vector<line>& drone_lines){
       Eigen::Vector3d test_p2 = find_proj(existing_line.a, existing_line.b, test_line.p2);
 
       if (((test_p1-test_line.p1).norm() < tolerance) && ((test_p2-test_line.p2).norm() < tolerance)) {
-        
-        double test_tmin_l1 = (test_p1.x() - existing_line.a.x()) / existing_line.b.x();
-        double test_tmax_l1 = (test_p2.x() - existing_line.a.x()) / existing_line.b.x();
 
-        if (test_tmin_l1 < existing_line.t_min){
-          existing_line.t_min = test_tmin_l1;
-          existing_line.p1 = test_p1;
-        }
-        if (test_tmax_l1 > existing_line.t_max){
-          existing_line.t_max = test_tmax_l1;
-          existing_line.p2 = test_p2;
-        }
+        bool line_inside = false;
         
-        double coef_learn = 0.1;
-        // existing_line.a = (1-coef_learn)*existing_line.a + coef_learn*test_line.a;
-        // existing_line.b = (1-coef_learn)*existing_line.b + coef_learn*test_line.b;
-        existing_line.radius = (1-coef_learn)*existing_line.radius + coef_learn*test_line.radius;
-        existing_line.points = test_line.points;
+        double ttest_p1 = (test_p1.x() - existing_line.a.x()) / existing_line.b.x();
+        double ttest_p2 = (test_p2.x() - existing_line.a.x()) / existing_line.b.x();
 
-        lineExists = true;
-        break;
+        if (ttest_p1 < ttest_p2){
+          if (!(ttest_p2 < existing_line.t_min || ttest_p1 > existing_line.t_max)){
+            lineExists = true;
+            if (ttest_p1 < existing_line.t_min){
+              existing_line.p1 = test_line.p1;
+            }
+            if (ttest_p2 > existing_line.t_max){
+              existing_line.p2 = test_line.p2;
+            }
+            if (ttest_p1 > existing_line.t_min && ttest_p2 < existing_line.t_max){
+              line_inside = true;
+            }
+          }
+        } else {
+          if (!(ttest_p1 < existing_line.t_min || ttest_p2 > existing_line.t_max)){
+            lineExists = true;
+            if (ttest_p2 < existing_line.t_min){
+              existing_line.p1 = test_line.p2;
+            }
+            if (ttest_p1 > existing_line.t_max){
+              existing_line.p2 = test_line.p1;
+            }
+            if (ttest_p2 > existing_line.t_min && ttest_p1 < existing_line.t_max){
+              line_inside = true;
+            }            
+          }
+        }
+
+        if (lineExists){
+          if (line_inside){
+            double coef_learn = 0.2;
+            existing_line.radius = (1-coef_learn)*existing_line.radius + coef_learn*test_line.radius;
+          } else {
+            existing_line.a = existing_line.p1;
+            existing_line.b = (existing_line.p2 - existing_line.p1).normalized();
+            existing_line.t_min = 0;
+            existing_line.t_max = (existing_line.p2.x() - existing_line.a.x()) / existing_line.b.x();
+            existing_line.points = test_line.points;
+          }
+          break;
+        }
       }
     } 
     

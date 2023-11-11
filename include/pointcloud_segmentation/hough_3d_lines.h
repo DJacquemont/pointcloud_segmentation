@@ -18,20 +18,27 @@ struct line {
   std::vector<Eigen::Vector3d> points;
 };
 
-void find_t(Eigen::Vector3d a, Eigen::Vector3d b, Eigen::Vector3d p, std::vector<double>& t_value){
+void find_t(Eigen::Vector3d a, Eigen::Vector3d b, Eigen::Vector3d p, std::vector<double>& t_value, std::vector<double>& p_norm){
 
   // t is similar for x, y and z
   double t = (p.x() - a.x()) / b.x();
 
   if (t_value.empty()){
     t_value.push_back(t);
+    p_norm.push_back((a + t * b).norm());
 
   } else {
     // Find the appropriate index to insert t while keeping the vector sorted
     auto it = std::upper_bound(t_value.begin(), t_value.end(), t);
 
+    // Calculate the index at which t should be inserted
+    int index = std::distance(t_value.begin(), it);
+
     // Insert t at the calculated index
     t_value.insert(it, t);
+
+    // Calculate the norm of p corresponding to t and insert it at the same index
+    p_norm.insert(p_norm.begin() + index, (a + t * b).norm());
   }
 }
 
@@ -196,6 +203,7 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<line>& computed
 
     // find t of the line segment, and the corresponding norm of p
     std::vector<double> p_radius;
+    std::vector<double> p_norm;
     std::vector<double> t_value;
     std::vector<Eigen::Vector3d> points;
     Eigen::Vector3d a_eigen(a.x, a.y, a.z);
@@ -207,7 +215,7 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<line>& computed
       Eigen::Vector3d point_eigen(point.x, point.y, point.z);
       Eigen::Vector3d p_proj = find_proj(a_eigen, b_eigen, point_eigen);
       p_radius.push_back((p_proj - point_eigen).norm());
-      find_t(a_eigen, b_eigen, p_proj, t_value);
+      find_t(a_eigen, b_eigen, p_proj, t_value, p_norm);
 
       // saving points
       points.push_back(point_eigen);
@@ -216,8 +224,15 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<line>& computed
     std::sort(p_radius.begin(), p_radius.end());
     double radius = p_radius[round(9*p_radius.size()/10)];
 
+    double maxDifference = std::abs(p_norm[1] - p_norm[0]);
+    for (size_t i = 1; i < p_norm.size() - 1; ++i) {
+        double difference = std::abs(p_norm[i + 1] - p_norm[i]);
+        if (difference > maxDifference)
+            maxDifference = difference;
+    }
+
     // add line to vector
-    if (radius > 0.05){
+    if (radius > 0.05 && maxDifference < 0.2){
 
       Eigen::Vector3d p1 = a_eigen + t_value[0]*b_eigen;
       Eigen::Vector3d p2 = a_eigen + t_value[t_value.size()-1]*b_eigen;
