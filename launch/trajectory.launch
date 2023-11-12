@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<launch>
+
+    <arg name="trajectory" default="eight" /> 
+    <arg name="replay_file" default="" />
+    <arg name="waypoints_file" default="wp_corners.csv" />
+    
+    <node pkg="auto_pilot_pkg" type="trajectory_node.py" name="trajectory_node" output="screen">
+        
+        <param name="trajectory"        value="$(arg trajectory)" />
+
+        <!-- Parametric trajectories parameters -->
+        <param name="replay_file"       value="$(arg replay_file)" />
+        <param name="arm"               value="true" />
+        <param name="min_altitude"      value="0.5" />
+        <param name="max_altitude"      value="2.5" />
+        <param name="hovering_height"   value="1.5" />
+        <param name="max_displacement"  value="2.0" />
+        <param name="velocity"          value="1.0" />
+        <param name="fixed_heading"     value="false" />
+
+        <!-- Waypoint trajectories parameters -->
+        <param name="plot"              value="false" />
+        <param name="waypoints_file"    value="$(find pointcloud_segmentation)/config/$(arg waypoints_file)" />
+        <param name="no_interpolation"  value="false" />
+        <param name="waypoint_velocity" value="0.5" />
+        <param name="mean_velocity"     value="1.0" />
+        <param name="loop"              value="true" />
+        <param name="velocity_control"  value="true" />
+
+    </node> 
+
+</launch>

@@ -39,7 +39,7 @@ public:
   // Transform the lines from the drone's frame to the world frame
   void drone2WorldLines(std::vector<line>& drone_lines);
 
-  void lineIdentification(std::vector<line>& drone_lines);
+  void segIdentification(std::vector<line>& drone_lines);
 
   void structureOutput();
 
@@ -115,39 +115,39 @@ void PtCdProcessing::pointcloudCallback(const sensor_msgs::PointCloud2::ConstPtr
   // Transform the lines from the drone's frame to the world frame
   drone2WorldLines(drone_lines);
 
-  lineIdentification(drone_lines);
+  segIdentification(drone_lines);
 
   struct_segm.clear();
   struct_joints.clear();
 
   structureOutput();
 
-  printf("---------------------------------------------------\n");
+  // printf("---------------------------------------------------\n");
 
-  // Print the world lines and the struc output
-  printf("World lines: %li\n", world_lines.size());
-  for (const line& existing_line : world_lines) {
-    ROS_INFO("World line: : a = (%f, %f, %f), b = (%f, %f, %f), t_min = %f, t_max = %f",
-              existing_line.a.x(), existing_line.a.y(), existing_line.a.z(),
-              existing_line.b.x(), existing_line.b.y(), existing_line.b.z(),
-              existing_line.t_min, existing_line.t_max);
-  }
-
-  printf("Struct output: %li\n", struct_segm.size());
-  for (const line& existing_line : struct_segm) {
-    ROS_INFO("Struct line: a = (%f, %f, %f), b = (%f, %f, %f), t_min = %f, t_max = %f",
-              existing_line.a.x(), existing_line.a.y(), existing_line.a.z(),
-              existing_line.b.x(), existing_line.b.y(), existing_line.b.z(),
-              existing_line.t_min, existing_line.t_max);
-  }
-
-  // printf("Struct joints: %li\n", struct_joints.size());
-  // for (size_t i = 0; i < struct_joints.size(); ++i) {
-  //   for (size_t j = 0; j < struct_joints[i].size(); ++j) {
-  //     ROS_INFO("Struct joint: (%f, %f, %f)",
-  //               struct_joints[i][j].x(), struct_joints[i][j].y(), struct_joints[i][j].z());
-  //   }
+  // // Print the world lines and the struc output
+  // printf("World lines: %li\n", world_lines.size());
+  // for (const line& existing_line : world_lines) {
+  //   ROS_INFO("World line: : a = (%f, %f, %f), b = (%f, %f, %f), t_min = %f, t_max = %f",
+  //             existing_line.a.x(), existing_line.a.y(), existing_line.a.z(),
+  //             existing_line.b.x(), existing_line.b.y(), existing_line.b.z(),
+  //             existing_line.t_min, existing_line.t_max);
   // }
+
+  // printf("Struct output: %li\n", struct_segm.size());
+  // for (const line& existing_line : struct_segm) {
+  //   ROS_INFO("Struct line: a = (%f, %f, %f), b = (%f, %f, %f), t_min = %f, t_max = %f",
+  //             existing_line.a.x(), existing_line.a.y(), existing_line.a.z(),
+  //             existing_line.b.x(), existing_line.b.y(), existing_line.b.z(),
+  //             existing_line.t_min, existing_line.t_max);
+  // }
+
+  // // printf("Struct joints: %li\n", struct_joints.size());
+  // // for (size_t i = 0; i < struct_joints.size(); ++i) {
+  // //   for (size_t j = 0; j < struct_joints[i].size(); ++j) {
+  // //     ROS_INFO("Struct joint: (%f, %f, %f)",
+  // //               struct_joints[i][j].x(), struct_joints[i][j].y(), struct_joints[i][j].z());
+  // //   }
+  // // }
 
 
   visualization();
@@ -224,9 +224,9 @@ void PtCdProcessing::drone2WorldLines(std::vector<line>& drone_lines){
   }
 }
 
-void PtCdProcessing::lineIdentification(std::vector<line>& drone_lines){
+void PtCdProcessing::segIdentification(std::vector<line>& drone_lines){
 
-  double tolerance = 0.5;
+  double tolerance = 0.7;
 
   for (line& test_line : drone_lines) {
     bool lineExists = false;

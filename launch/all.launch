@@ -1,23 +1,42 @@
 <?xml version="1.0"?>
 
+<!-- Typically use with flying_arena_ros.wbt -->
+
 <launch>
 
+    <!-- Drone controller (Webots), passed as command line args -->
     <arg name="port"        default="1234" />       <!-- Port used by extern controllers with Webots, default: 1234 -->
-    <arg name="trajectory"  default="eight" />      <!-- Trajectory to follow -->
-    <arg name="imu_id"      default="1" />      <!-- IMU id to use -->
-    <arg name="rviz_AP_pkg" default="false" /> <!-- Launch rviz in the Auto Pilot package -->
+    <arg name="robot_name"  default="starling" />   <!-- Robot name in the Webots world, e.g. voxl_m500, starling, ... -->
+    <arg name="mode"        default="mcs" />        <!-- Mode to use, vio or mcs -->
+
+    <!-- Auto pilot -->
+    <arg name="flight_parameters" default="starling.fp" /> <!-- Autopilot flight parameters file to use -->
+    <arg name="imu_id"      default="1" />              <!-- IMU id to use -->
+    <arg name="trajectory"  default="waypoints" />      <!-- Trajectory to follow -->
+    <arg name="waypoints"   default="wp_corners.csv" /> <!-- Waypoints file to use -->
+
+    <!-- visualization -->
     <arg name="rviz" default="true" /> <!-- Launch rviz -->
 
     <rosparam param="/use_sim_time"> true </rosparam> <!-- Use simulation time, the drone_controller_node will publish the /clock topic -->
+    
+    <!-- Main autopilot node, responsible for computing motor command -->
+    <node pkg="auto_pilot_pkg" type="auto_pilot_node.py" name="auto_pilot_node" output="screen" 
+            args="$(find auto_pilot_pkg)/config/$(arg flight_parameters)">
+        <param name="use_service" value="false" />
+    </node>
 
-    <!-- =============================================================================== -->
+    <!-- Drone controller node (webots controller), responsible for sending motor command to 
+    the drone and sending pose data to the autopilot -->
+    <node pkg="auto_pilot_pkg" type="drone_controller_node.py" name="drone_controller_node" 
+            args="-p $(arg port) -n $(arg robot_name) -m $(arg mode)" output="screen">
+        <param name="imu_id" value="$(arg imu_id)" />
+    </node>
 
-    <!-- Including & starting Autopilot launchfile with correct parameters-->
-    <include file="$(find auto_pilot_pkg)/launch/all.launch">
-        <arg name="port"        value="$(arg port)"/>
-        <arg name="trajectory"  value="$(arg trajectory)"/>
-        <arg name="imu_id"      value="$(arg imu_id)"/>
-        <arg name="rviz"        value="$(arg rviz_AP_pkg)"/>
+    <!-- Trajectory node, responsible for sending targets to the autopilot -->
+    <include file="$(find pointcloud_segmentation)/launch/trajectory.launch">
+        <arg name="trajectory" default="$(arg trajectory)" />
+        <arg name="waypoints_file" default="$(arg waypoints)" />
     </include>
 
     <!-- Pointcloud segmentation node, responsible for processing tof pointclouds -->
