@@ -39,6 +39,10 @@ public:
   // Transform the lines from the drone's frame to the world frame
   void drone2WorldLines(std::vector<line>& drone_lines);
 
+  void lineIdentification(std::vector<line>& drone_lines);
+
+  void structureOutput();
+
   // Publish the points used, and the computed lines as cylinders in RViz
   void visualization();
 
@@ -55,6 +59,9 @@ private:
   Eigen::Quaterniond drone_orientation;
 
   std::vector<line> world_lines;
+  std::vector<line> struct_segm;
+  std::vector<Eigen::Vector3d> struct_joints;
+
 };
 
 //--------------------------------------------------------------------
@@ -108,6 +115,41 @@ void PtCdProcessing::pointcloudCallback(const sensor_msgs::PointCloud2::ConstPtr
   // Transform the lines from the drone's frame to the world frame
   drone2WorldLines(drone_lines);
 
+  lineIdentification(drone_lines);
+
+  struct_segm.clear();
+  struct_joints.clear();
+
+  structureOutput();
+
+  printf("---------------------------------------------------\n");
+
+  // Print the world lines and the struc output
+  printf("World lines: %li\n", world_lines.size());
+  for (const line& existing_line : world_lines) {
+    ROS_INFO("World line: : a = (%f, %f, %f), b = (%f, %f, %f), t_min = %f, t_max = %f",
+              existing_line.a.x(), existing_line.a.y(), existing_line.a.z(),
+              existing_line.b.x(), existing_line.b.y(), existing_line.b.z(),
+              existing_line.t_min, existing_line.t_max);
+  }
+
+  printf("Struct output: %li\n", struct_segm.size());
+  for (const line& existing_line : struct_segm) {
+    ROS_INFO("Struct line: a = (%f, %f, %f), b = (%f, %f, %f), t_min = %f, t_max = %f",
+              existing_line.a.x(), existing_line.a.y(), existing_line.a.z(),
+              existing_line.b.x(), existing_line.b.y(), existing_line.b.z(),
+              existing_line.t_min, existing_line.t_max);
+  }
+
+  // printf("Struct joints: %li\n", struct_joints.size());
+  // for (size_t i = 0; i < struct_joints.size(); ++i) {
+  //   for (size_t j = 0; j < struct_joints[i].size(); ++j) {
+  //     ROS_INFO("Struct joint: (%f, %f, %f)",
+  //               struct_joints[i][j].x(), struct_joints[i][j].y(), struct_joints[i][j].z());
+  //   }
+  // }
+
+
   visualization();
 
   auto callEnd = high_resolution_clock::now();
@@ -160,11 +202,9 @@ void PtCdProcessing::drone2WorldLines(std::vector<line>& drone_lines){
   // Convert the quaternion to a rotation matrix
   Eigen::Matrix3d rotation_matrix = drone_orientation.toRotationMatrix();
 
-  // Tolerance for considering lines as equal
-  double tolerance = 0.5;
-
-  for (const line& computed_line : drone_lines) {
+  for (line& computed_line : drone_lines) {
     bool lineExists = false;
+    bool line_inside = false;
 
     // Transform the line in the world frame
     line test_line;
@@ -180,19 +220,29 @@ void PtCdProcessing::drone2WorldLines(std::vector<line>& drone_lines){
       test_line.points.push_back(rotation_matrix * point + drone_position);
     }
 
+    computed_line = test_line;
+  }
+}
+
+void PtCdProcessing::lineIdentification(std::vector<line>& drone_lines){
+
+  double tolerance = 0.5;
+
+  for (line& test_line : drone_lines) {
+    bool lineExists = false;
+    bool line_inside = false;
+
     for (line& existing_line : world_lines) {
       Eigen::Vector3d test_p1 = find_proj(existing_line.a, existing_line.b, test_line.p1);
       Eigen::Vector3d test_p2 = find_proj(existing_line.a, existing_line.b, test_line.p2);
 
       if (((test_p1-test_line.p1).norm() < tolerance) && ((test_p2-test_line.p2).norm() < tolerance)) {
-
-        bool line_inside = false;
         
         double ttest_p1 = (test_p1.x() - existing_line.a.x()) / existing_line.b.x();
         double ttest_p2 = (test_p2.x() - existing_line.a.x()) / existing_line.b.x();
 
         if (ttest_p1 < ttest_p2){
-          if (!(ttest_p2 < existing_line.t_min || ttest_p1 > existing_line.t_max)){
+          if (!(ttest_p2 <= existing_line.t_min || ttest_p1 >= existing_line.t_max)){
             lineExists = true;
             if (ttest_p1 < existing_line.t_min){
               existing_line.p1 = test_line.p1;
@@ -205,7 +255,7 @@ void PtCdProcessing::drone2WorldLines(std::vector<line>& drone_lines){
             }
           }
         } else {
-          if (!(ttest_p1 < existing_line.t_min || ttest_p2 > existing_line.t_max)){
+          if (!(ttest_p1 <= existing_line.t_min || ttest_p2 >= existing_line.t_max)){
             lineExists = true;
             if (ttest_p2 < existing_line.t_min){
               existing_line.p1 = test_line.p2;
@@ -241,6 +291,57 @@ void PtCdProcessing::drone2WorldLines(std::vector<line>& drone_lines){
   }
 }
 
+void PtCdProcessing::structureOutput(){
+
+  double tolerance = 0.3;
+
+  for (size_t i = 0; i < world_lines.size(); ++i) {
+    const line& existing_line_1 = world_lines[i];
+    bool hasIntersection = false;
+
+    for (size_t j = i + 1; j < world_lines.size(); ++j) {
+      const line& existing_line_2 = world_lines[j];
+
+      Eigen::Vector3d cross_prod = existing_line_2.b.cross(existing_line_1.b).normalized();
+      Eigen::Vector3d RHS = existing_line_2.p1 - existing_line_1.p1;
+      Eigen::Matrix3d LHS;
+      LHS << existing_line_1.b, -existing_line_2.b, cross_prod;
+
+      Eigen::Vector3d solution = LHS.colPivHouseholderQr().solve(RHS);
+      
+      double dist_lines = abs(solution[2] * cross_prod.norm());
+
+
+      if (((solution[0] >= existing_line_1.t_min && solution[0] <= existing_line_1.t_max) &&
+          (solution[1] > existing_line_2.t_min && solution[1] < existing_line_2.t_max)) &&
+          dist_lines < tolerance) {
+
+        Eigen::Vector3d existing_line_1_cross = existing_line_1.p1 + solution[0] * existing_line_1.b;
+        Eigen::Vector3d existing_line_2_cross = existing_line_2.p1 + solution[1] * existing_line_2.b;
+
+        line new_line_1 = existing_line_1;
+        new_line_1.p1 = existing_line_1_cross;
+        new_line_1.t_min = solution[0];
+        struct_segm.push_back(new_line_1);
+
+        line new_line_2 = existing_line_1;
+        new_line_2.p2 = existing_line_1_cross;
+        new_line_2.t_max = solution[0];
+        struct_segm.push_back(new_line_2);
+
+        struct_joints.push_back(existing_line_1_cross);
+
+        hasIntersection = true;
+        break;
+      }
+    }
+    if (!hasIntersection) {
+    // If no intersection is found, add the original line to the output
+      struct_segm.push_back(existing_line_1);
+    }
+  }
+}
+
 // Publish the points used, and the computed lines as cylinders in RViz
 void PtCdProcessing::visualization() {
   // Create a pointcloud to hold the points used for Hough
@@ -251,8 +352,8 @@ void PtCdProcessing::visualization() {
     
 
   // Loop through the computed lines and create a cylinder for each line
-  for (size_t i = 0; i < world_lines.size(); i++) {
-    for (const Eigen::Vector3d& point : world_lines[i].points){
+  for (size_t i = 0; i < struct_segm.size(); i++) {
+    for (const Eigen::Vector3d& point : struct_segm[i].points){
       pcl::PointXYZ p_pcl;
       p_pcl.x = point.x();
       p_pcl.y = point.y();
@@ -273,12 +374,12 @@ void PtCdProcessing::visualization() {
     cylinder.type = visualization_msgs::Marker::CYLINDER;
 
     // Set the cylinder's position (midpoint between p1 and p2)
-    cylinder.pose.position.x = (world_lines[i].p1.x() + world_lines[i].p2.x()) / 2.0;
-    cylinder.pose.position.y = (world_lines[i].p1.y() + world_lines[i].p2.y()) / 2.0;
-    cylinder.pose.position.z = (world_lines[i].p1.z() + world_lines[i].p2.z()) / 2.0;
+    cylinder.pose.position.x = (struct_segm[i].p1.x() + struct_segm[i].p2.x()) / 2.0;
+    cylinder.pose.position.y = (struct_segm[i].p1.y() + struct_segm[i].p2.y()) / 2.0;
+    cylinder.pose.position.z = (struct_segm[i].p1.z() + struct_segm[i].p2.z()) / 2.0;
 
     // Set the cylinder's orientation
-    Eigen::Vector3d direction(world_lines[i].p2 - world_lines[i].p1);
+    Eigen::Vector3d direction(struct_segm[i].p2 - struct_segm[i].p1);
     direction.normalize();
     Eigen::Quaterniond q;
     q.setFromTwoVectors(Eigen::Vector3d(0, 0, 1), direction);
@@ -288,8 +389,8 @@ void PtCdProcessing::visualization() {
     cylinder.pose.orientation.w = q.w();
 
     // Set the cylinder's scale (height and radius)
-    double cylinder_height = (world_lines[i].p2 - world_lines[i].p1).norm();
-    double cylinder_radius = world_lines[i].radius;
+    double cylinder_height = (struct_segm[i].p2 - struct_segm[i].p1).norm();
+    double cylinder_radius = struct_segm[i].radius;
     cylinder.scale.x = cylinder_radius * 2.0;
     cylinder.scale.y = cylinder_radius * 2.0;
     cylinder.scale.z = cylinder_height;
@@ -302,6 +403,40 @@ void PtCdProcessing::visualization() {
 
     // Add the cylinder marker to the marker array
     markers.markers.push_back(cylinder);
+  }
+
+  // Loop through the computed lines and create a sphere for each joint
+  for (size_t i = 0; i < struct_joints.size(); i++) {
+    visualization_msgs::Marker sphere;
+
+    // Set the marker properties for the cylinder
+    sphere.header.frame_id = "mocap";
+    sphere.header.stamp = ros::Time::now();
+    sphere.ns = "spheres";
+    sphere.id = i;
+    sphere.action = visualization_msgs::Marker::ADD;
+    sphere.pose.orientation.w = 1.0;
+    sphere.type = visualization_msgs::Marker::SPHERE;
+
+    // Set the cylinder's position (midpoint between p1 and p2)
+    sphere.pose.position.x = struct_joints[i].x();
+    sphere.pose.position.y = struct_joints[i].y();
+    sphere.pose.position.z = struct_joints[i].z();
+
+    // Set the cylinder's scale (height and radius)
+    double sphere_radius = 0.15;
+    sphere.scale.x = sphere_radius * 2.0;
+    sphere.scale.y = sphere_radius * 2.0;
+    sphere.scale.z = sphere_radius * 2.0;
+
+    // Set the cylinder's color and transparency
+    sphere.color.r = 0.0;
+    sphere.color.g = 1.0;
+    sphere.color.b = 0.0;
+    sphere.color.a = 1.0;
+
+    // Add the cylinder marker to the marker array
+    markers.markers.push_back(sphere);
   }
 
   // Publishing points used Hough
