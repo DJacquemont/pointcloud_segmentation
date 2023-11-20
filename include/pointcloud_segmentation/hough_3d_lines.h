@@ -10,8 +10,39 @@
 
 using Eigen::MatrixXf;
 
+// class line
+// {
+// public:
+//   void set_p1(Eigen::Vector3d p1){
+//     this->t_min = (p1.x() - this->a.x()) / this->b.x();
+//   }
+
+//   void set_p2(Eigen::Vector3d p2){
+//     this->t_max = (p2.x() - this->a.x()) / this->b.x();
+//   }
+
+//   Eigen::Vector3d p1(){
+//     Eigen::Vector3d p1 = this->a + this->t_min * this->b;
+//     return p1;
+//   }
+
+//   Eigen::Vector3d p2(){
+//     Eigen::Vector3d p2 = this->a + this->t_max * this->b;
+//     return p2;
+//   }
+
+//   void set_points(std::vector<Eigen::Vector3d> points){
+//     this->points = points;
+//   }
+
+//   Eigen::Vector3d a, b;
+//   double t_min, t_max;
+//   double radius;
+//   std::vector<Eigen::Vector3d> points;
+// };
+
 struct line {
-  Eigen::Vector3d p1, p2;
+  // Eigen::Vector3d p1, p2;
   Eigen::Vector3d a, b;
   double t_min, t_max;
   double radius;
@@ -109,7 +140,7 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<line>& computed
   // default parameter values
   double opt_dx = 0.15;
   int opt_nlines = 4;
-  int opt_minvotes = 25;
+  int opt_minvotes = 20;
   int opt_verbose = 0;
 
   // number of icosahedron subdivisions for direction discretization
@@ -222,7 +253,7 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<line>& computed
       }
 
     std::sort(p_radius.begin(), p_radius.end());
-    double radius = p_radius[round(9*p_radius.size()/10)];
+    double radius = std::max(p_radius[0], p_radius[p_radius.size()-1]);
 
     double maxDifference = std::abs(p_norm[1] - p_norm[0]);
     for (size_t i = 1; i < p_norm.size() - 1; ++i) {
@@ -232,14 +263,12 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<line>& computed
     }
 
     // add line to vector
-    if (radius > 0.05 && maxDifference < 0.2){
+    if (radius > 0.1 && maxDifference < 0.1){
 
       Eigen::Vector3d p1 = a_eigen + t_value[0]*b_eigen;
       Eigen::Vector3d p2 = a_eigen + t_value[t_value.size()-1]*b_eigen;
 
       line l;
-      l.p1 = p1;
-      l.p2 = p2;
       l.a = a_eigen;
       l.b = b_eigen;
       l.t_min = t_value[0];

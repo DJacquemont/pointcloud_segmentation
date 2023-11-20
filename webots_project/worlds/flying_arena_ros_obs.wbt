@@ -9,8 +9,8 @@ WorldInfo {
   basicTimeStep 8
 }
 Viewpoint {
-  orientation -0.6497975854755852 0.07518935680899684 0.75637930863605 2.8735225880175963
-  position 4.075881637425964 -1.9268707513222167 17.979910585099844
+  orientation -0.371087210000687 0.8236128611759477 0.42890108122908166 1.4411277712841974
+  position -6.610907109766187 -7.531177052313886 21.183924925251574
 }
 Background {
   skyColor [
@@ -55,8 +55,8 @@ starling {
   controller "<extern>"
 }
 Solid {
-  translation 2.51928 1.05751 1.10536
-  rotation 0.8660271018320259 9.564751124673791e-06 0.49999705879228645 0.523601
+  translation 2.77288 0.78632 1.49542
+  rotation 0.9373915650805004 0.04546587890529631 0.3452968397933859 0.761398
   children [
     DEF SHAPE_CYL Shape {
       appearance PBRAppearance {
@@ -71,7 +71,7 @@ Solid {
   boundingObject USE SHAPE_CYL
 }
 Solid {
-  translation 2.55088 0.84086 1.50984
+  translation 2.75375 0.89336 1.52202
   rotation 0.7823670356685052 0.2383310108656302 -0.5754130262333681 -0.4186153071795866
   children [
     DEF SHAPE_CYL Shape {
@@ -87,7 +87,7 @@ Solid {
   boundingObject USE SHAPE_CYL
 }
 Solid {
-  translation -2.80374 -0.544148 1.18852
+  translation -2.00157 -0.33665 1.23666
   rotation 0.7823670356685052 0.2383310108656302 -0.5754130262333681 -0.4186153071795866
   children [
     DEF SHAPE_CYL Shape {
@@ -103,7 +103,7 @@ Solid {
   boundingObject USE SHAPE_CYL
 }
 Solid {
-  translation -2.19856 0.930214 1.30215
+  translation -1.89898 1.00772 1.32013
   rotation 0.596377737329658 -0.10475895385966225 0.7958386494785148 0.32385
   children [
     DEF SHAPE_CYL Shape {
@@ -119,7 +119,7 @@ Solid {
   boundingObject USE SHAPE_CYL
 }
 Solid {
-  translation -0.98136 2.12801 1.54987
+  translation -0.971105 2.09014 1.54241
   rotation 0.596377737329658 -0.10475895385966225 0.7958386494785148 0.32385
   children [
     DEF SHAPE_CYL Shape {
@@ -135,7 +135,7 @@ Solid {
   boundingObject USE SHAPE_CYL
 }
 Solid {
-  translation 1.27009 1.41117 1.42809
+  translation 1.15464 1.83805 1.51149
   rotation 0.596377737329658 -0.10475895385966225 0.7958386494785148 0.32385
   children [
     DEF SHAPE_CYL Shape {
@@ -151,7 +151,7 @@ Solid {
   boundingObject USE SHAPE_CYL
 }
 Solid {
-  translation -1.78053 -1.78285 0.732776
+  translation -1.52756 -2.84853 1.11555
   rotation -0.5081508748422008 0.8521297901200324 0.1251299691804298 0.791712
   children [
     DEF SHAPE_CYL Shape {
@@ -167,7 +167,7 @@ Solid {
   boundingObject USE SHAPE_CYL
 }
 Solid {
-  translation -0.270861 -0.772046 2.55052
+  translation -0.0203899 -1.82842 2.92987
   rotation -0.5081508748422008 0.8521297901200324 0.1251299691804298 0.791712
   children [
     DEF SHAPE_CYL Shape {
@@ -183,7 +183,7 @@ Solid {
   boundingObject USE SHAPE_CYL
 }
 Solid {
-  translation 1.96547 -1.66047 1.54057
+  translation 2.03084 -1.93608 1.63957
   rotation -0.16522405819258446 0.97735434422817 -0.13221004656491542 2.5301
   children [
     DEF SHAPE_CYL Shape {
