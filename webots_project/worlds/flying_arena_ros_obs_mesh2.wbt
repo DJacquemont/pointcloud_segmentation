@@ -9,8 +9,8 @@ WorldInfo {
   basicTimeStep 8
 }
 Viewpoint {
-  orientation 0.08775083396474245 0.06806321367346853 -0.9938144646174819 1.6328768961021578
-  position 0.4187217235963566 18.742088150624124 4.5140878826012125
+  orientation 0.29683991031699 0.37615962600789 -0.8777186356712531 1.4098770830621012
+  position -2.699760559925565 9.39644218415977 7.932294608191251
 }
 Background {
   skyColor [
@@ -55,7 +55,7 @@ starling {
   controller "<extern>"
 }
 Solid {
-  translation -1.07 0 0.67
+  translation -0.74 0.67 0.67
   children [
     Transform {
       translation 0.92 2.20386e-06 -0.6

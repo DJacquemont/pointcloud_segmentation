@@ -138,7 +138,7 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<line>& computed
   }
 
   // default parameter values
-  double opt_dx = 0.15;
+  double opt_dx = 0.05;
   int opt_nlines = 4;
   int opt_minvotes = 20;
   int opt_verbose = 0;
@@ -263,7 +263,7 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<line>& computed
     }
 
     // add line to vector
-    if (radius > 0.1 && maxDifference < 0.1){
+    if (maxDifference < 0.1){
 
       Eigen::Vector3d p1 = a_eigen + t_value[0]*b_eigen;
       Eigen::Vector3d p2 = a_eigen + t_value[t_value.size()-1]*b_eigen;

@@ -3,6 +3,8 @@
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/filters/passthrough.h>
+#include <pcl/common/common.h>
+#include <pcl/common/pca.h>
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <geometry_msgs/PoseStamped.h>
@@ -39,6 +41,8 @@ public:
   // Transform the lines from the drone's frame to the world frame
   void drone2WorldLines(std::vector<line>& drone_lines);
 
+  int cloudLinearShapeCheck(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud);
+
   void segIdentification(std::vector<line>& drone_lines);
 
   void structureOutput();
@@ -61,7 +65,6 @@ private:
   std::vector<line> world_lines;
   std::vector<line> struct_segm;
   std::vector<Eigen::Vector3d> struct_joints;
-
 };
 
 //--------------------------------------------------------------------
@@ -74,6 +77,9 @@ int main(int argc, char *argv[])
   ROS_INFO("Pointcloud semgmentation node starting");
 
   ros::init(argc, argv, "pointcloud_seg");
+
+  std::vector<double> radius = {0.2, 0.07};
+  std::vector<double> theta = {0, M_PI/4, M_PI/2, 3*M_PI/4, M_PI, 5*M_PI/4, 3*M_PI/2, 7*M_PI/4};
 
   initHoughSpace();
 
@@ -151,12 +157,12 @@ void PtCdProcessing::cloudFiltering(pcl::PCLPointCloud2::Ptr& cloud, pcl::PointC
 
   pass.setInputCloud(filtered_cloud);
   pass.setFilterFieldName("z");
-  pass.setFilterLimits(1.0f-drone_position.z(), 1.0f);
+  pass.setFilterLimits(0.3f-drone_position.z(), 2.0f);
   pass.filter(*filtered_cloud);
 
   pcl::VoxelGrid<pcl::PCLPointCloud2> voxel_grid;
   voxel_grid.setInputCloud(filtered_cloud);
-  voxel_grid.setLeafSize(0.1f, 0.1f, 0.1f);
+  voxel_grid.setLeafSize(0.03f, 0.03f, 0.03f);
   voxel_grid.filter(*filtered_cloud);
 
   pcl::fromPCLPointCloud2(*filtered_cloud, *filtered_cloud_XYZ );
@@ -194,6 +200,28 @@ void PtCdProcessing::drone2WorldLines(std::vector<line>& drone_lines){
   }
 }
 
+
+int PtCdProcessing::cloudLinearShapeCheck(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud) {
+
+  // Performing PCA using PCL
+  pcl::PCA<pcl::PointXYZ> pca;
+  pca.setInputCloud(cloud);
+
+  // Eigenvalues are in descending order
+  Eigen::Vector3d eigenvalues = pca.getEigenValues().cast<double>();
+
+  // Assess the distribution of points based on eigenvalues
+  double linearityThreshold = 25;  // Define an appropriate threshold
+  if (eigenvalues[0] > linearityThreshold * (eigenvalues[1] + eigenvalues[2])) {
+    ROS_INFO("Points form a linear structure");
+    return 0;
+  } else {
+    ROS_INFO("Points form a dispersed structure");
+    return 1;
+  }
+}
+
+
 void PtCdProcessing::segIdentification(std::vector<line>& drone_lines){
 
   double tolerance = 0.5;
@@ -201,7 +229,20 @@ void PtCdProcessing::segIdentification(std::vector<line>& drone_lines){
   double parallelism_tolerance = 0.2; // Tolerance for parallelism check
 
   for (const line& test_line : drone_lines) {
-    bool lineExists = false;
+
+    bool addLine = true;
+
+    // Extract points from test_line and create a PCL point cloud
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
+    for (const auto& point : test_line.points) {
+      cloud->points.push_back(pcl::PointXYZ(point.x(), point.y(), point.z()));
+    }
+
+    // Check the shape of the point cloud
+    if (cloudLinearShapeCheck(cloud)) {
+      addLine = false;
+      continue;
+    }
 
     for (size_t i = 0; i < world_lines.size(); ++i) {
       Eigen::Vector3d test_line_p1 = test_line.t_min * test_line.b + test_line.a;
@@ -232,7 +273,7 @@ void PtCdProcessing::segIdentification(std::vector<line>& drone_lines){
         if (!(std::min(test_line_proj_t1, test_line_proj_t2)>std::max(existing_line_proj_t1, existing_line_proj_t2)) ||
               (std::max(test_line_proj_t1, test_line_proj_t2)<std::min(existing_line_proj_t1, existing_line_proj_t2))){
 
-          lineExists = true;
+          addLine = false;
 
           world_lines[i].a = new_world_line_a;
           world_lines[i].b = new_world_line_b;
@@ -247,7 +288,7 @@ void PtCdProcessing::segIdentification(std::vector<line>& drone_lines){
         }
       }
     }
-    if (!lineExists) {
+    if (addLine) {
       world_lines.push_back(test_line);
     }
   }
