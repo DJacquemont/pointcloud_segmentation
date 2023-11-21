@@ -38,7 +38,7 @@ public:
   {
     tof_pc_sub = node.subscribe("/tof_pc", 1, &PtCdProcessing::pointcloudCallback, this);
     pose_sub = node.subscribe("/mavros/local_position/pose", 1, &PtCdProcessing::poseCallback, this);
-    computed_lines_pub = node.advertise<visualization_msgs::MarkerArray>("computed_lines", 1);
+    marker_pub = node.advertise<visualization_msgs::MarkerArray>("markers", 1);
     filtered_pc_pub = node.advertise<sensor_msgs::PointCloud2>("filtered_pointcloud", 1);
     hough_pc_pub = node.advertise<sensor_msgs::PointCloud2>("hough_pointcloud", 1);
   }
@@ -55,19 +55,19 @@ public:
   // Filtering pointcloud
   void cloudFiltering(pcl::PCLPointCloud2::Ptr& cloud, pcl::PointCloud<pcl::PointXYZ>::Ptr& filtered_cloud_XYZ);
 
-  // Transform the lines from the drone's frame to the world frame
-  void drone2WorldLines(std::vector<segment>& drone_lines);
+  // Transform the segments from the drone's frame to the world frame
+  void drone2WorldSeg(std::vector<segment>& drone_segments);
 
   // Check if the point cloud is linear
   int cloudLinearShapeCheck(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud);
 
-  // Identify intersections between lines
-  void segIdentification(std::vector<segment>& drone_lines);
+  // Identify intersections between segments
+  void segIdentification(std::vector<segment>& drone_segments);
 
   // Output the structure
   void structureOutput();
 
-  // Publish the points used, and the computed lines as cylinders in RViz
+  // Publish the points used, and the computed segments as cylinders in RViz
   void visualization();
 
 private:
@@ -75,7 +75,7 @@ private:
 
   ros::Subscriber tof_pc_sub;
   ros::Subscriber pose_sub;
-  ros::Publisher computed_lines_pub;
+  ros::Publisher marker_pub;
   ros::Publisher filtered_pc_pub;
   ros::Publisher hough_pc_pub;
   
@@ -83,13 +83,13 @@ private:
   Eigen::Vector3d drone_position;
   Eigen::Quaterniond drone_orientation;
 
-  std::vector<segment> world_lines;
+  std::vector<segment> world_segments;
   std::vector<segment> struct_segm;
   std::vector<Eigen::Vector3d> struct_joints;
   std::vector<std::vector<std::tuple<double, double>>> intersection_matrix;
 
   // Parameters
-  const std::vector<double> radius_sizes = {0.03}; // 0.2, 0.07, 0.05, 0.1
+  const std::vector<double> radius_sizes = {0.1}; // 0.2, 0.07, 0.05, 0.1, 0.03
   const double leaf_size = std::min(radius_sizes[0], radius_sizes[radius_sizes.size()-1]);
 };
 
@@ -150,23 +150,23 @@ void PtCdProcessing::pointcloudCallback(const sensor_msgs::PointCloud2::ConstPtr
   cloudFiltering(cloud, filtered_cloud_XYZ);
 
   // segment extraction with the Hough transform
-  std::vector<segment> drone_lines;
+  std::vector<segment> drone_segments;
   const double opt_dx = sqrt(3)*leaf_size; // optimal discretization step
-  if (hough3dlines(*filtered_cloud_XYZ, drone_lines, opt_dx, radius_sizes, VERBOSE) && VERBOSE > INFO){
+  if (hough3dlines(*filtered_cloud_XYZ, drone_segments, opt_dx, radius_sizes, VERBOSE) && VERBOSE > INFO){
     ROS_WARN("Unable to perform the Hough transform");
   }
 
   if (VERBOSE > NONE){
-    ROS_INFO("Number of lines detected: %ld", drone_lines.size());
+    ROS_INFO("Number of segments detected: %ld", drone_segments.size());
   }
 
-  // Transform the lines from the drone's frame to the world frame
-  drone2WorldLines(drone_lines);
+  // Transform the segments from the drone's frame to the world frame
+  drone2WorldSeg(drone_segments);
 
-  // Filter the segments that already exist in the world_lines
-  segIdentification(drone_lines);
+  // Filter the segments that already exist in the world_segments
+  segIdentification(drone_segments);
 
-  // Identify intersections between lines, and ready the data for output
+  // Identify intersections between segments, and ready the data for output
   structureOutput();
 
   visualization();
@@ -241,41 +241,39 @@ void PtCdProcessing::cloudFiltering(pcl::PCLPointCloud2::Ptr& cloud, pcl::PointC
 }
 
 
-// Transform the lines from the drone's frame to the world frame
-void PtCdProcessing::drone2WorldLines(std::vector<segment>& drone_lines){
+// Transform the segments from the drone's frame to the world frame
+void PtCdProcessing::drone2WorldSeg(std::vector<segment>& drone_segments){
 
   // Convert the quaternion to a rotation matrix
   Eigen::Matrix3d rotation_matrix = drone_orientation.toRotationMatrix();
 
   std::vector<segment> valid_segments;
 
-  for (segment& computed_line : drone_lines) {
-    bool lineExists = false;
-    bool line_inside = false;
+  for (segment& seg : drone_segments) {
 
     // Transform the segment in the world frame
-    segment test_line;
-    test_line.a = rotation_matrix * computed_line.a + drone_position;
-    test_line.b = rotation_matrix * computed_line.b;
-    test_line.t_min = computed_line.t_min;
-    test_line.t_max = computed_line.t_max;
+    segment test_seg;
+    test_seg.a = rotation_matrix * seg.a + drone_position;
+    test_seg.b = rotation_matrix * seg.b;
+    test_seg.t_min = seg.t_min;
+    test_seg.t_max = seg.t_max;
 
     // Check if the segment is above the ground
-    Eigen::Vector3d test_line_p1 = test_line.t_min * test_line.b + test_line.a;
-    Eigen::Vector3d test_line_p2 = test_line.t_max * test_line.b + test_line.a;
+    Eigen::Vector3d test_seg_p1 = test_seg.t_min * test_seg.b + test_seg.a;
+    Eigen::Vector3d test_seg_p2 = test_seg.t_max * test_seg.b + test_seg.a;
 
-    if (test_line_p1.z() > FLOOR_TRIM_HEIGHT || test_line_p2.z() > FLOOR_TRIM_HEIGHT){
+    if (test_seg_p1.z() > FLOOR_TRIM_HEIGHT || test_seg_p2.z() > FLOOR_TRIM_HEIGHT){
 
-      test_line.radius = computed_line.radius;
-      for (const Eigen::Vector3d& point : computed_line.points){
-        test_line.points.push_back(rotation_matrix * point + drone_position);
+      test_seg.radius = seg.radius;
+      for (const Eigen::Vector3d& point : seg.points){
+        test_seg.points.push_back(rotation_matrix * point + drone_position);
       }
 
-      valid_segments.push_back(test_line);
+      valid_segments.push_back(test_seg);
     }
   }
 
-  drone_lines = valid_segments;
+  drone_segments = valid_segments;
 }
 
 
@@ -300,82 +298,83 @@ int PtCdProcessing::cloudLinearShapeCheck(pcl::PointCloud<pcl::PointXYZ>::Ptr cl
 }
 
 
-void PtCdProcessing::segIdentification(std::vector<segment>& drone_lines){
+void PtCdProcessing::segIdentification(std::vector<segment>& drone_segments){
 
-  for (const segment& test_line : drone_lines) {
+  for (const segment& seg : drone_segments) {
     double max_dx = 2*sqrt(3)*leaf_size;
-    double tolerance = 2*max_dx + 2*test_line.radius;
+    double tolerance = 2*max_dx + 2*seg.radius;
+    // double tolerance = 2*seg.radius;
 
-    bool addLine = true;
+    bool add_seg = true;
 
-    // Extract points from test_line and create a PCL point cloud
+    // Extract points from seg and create a PCL point cloud
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
-    for (const auto& point : test_line.points) {
+    for (const auto& point : seg.points) {
       cloud->points.push_back(pcl::PointXYZ(point.x(), point.y(), point.z()));
     }
 
     // Check the shape of the point cloud
     if (cloudLinearShapeCheck(cloud)) {
-      addLine = false;
+      add_seg = false;
       continue;
     }
 
-    for (size_t i = 0; i < world_lines.size(); ++i) {
-      Eigen::Vector3d test_line_p1 = test_line.t_min * test_line.b + test_line.a;
-      Eigen::Vector3d test_line_p2 = test_line.t_max * test_line.b + test_line.a;
-      Eigen::Vector3d existing_line_p1 = world_lines[i].t_min * world_lines[i].b + world_lines[i].a;
-      Eigen::Vector3d existing_line_p2 = world_lines[i].t_max * world_lines[i].b + world_lines[i].a;
+    for (size_t i = 0; i < world_segments.size(); ++i) {
+      Eigen::Vector3d test_seg_p1 = seg.t_min * seg.b + seg.a;
+      Eigen::Vector3d test_seg_p2 = seg.t_max * seg.b + seg.a;
+      Eigen::Vector3d world_seg_p1 = world_segments[i].t_min * world_segments[i].b + world_segments[i].a;
+      Eigen::Vector3d world_seg_p2 = world_segments[i].t_max * world_segments[i].b + world_segments[i].a;
 
-      Eigen::Vector3d test_line_proj_p1 = find_proj(world_lines[i].a, world_lines[i].b, test_line_p1);
-      Eigen::Vector3d test_line_proj_p2 = find_proj(world_lines[i].a, world_lines[i].b, test_line_p2);
+      Eigen::Vector3d test_seg_proj_p1 = find_proj(world_segments[i].a, world_segments[i].b, test_seg_p1);
+      Eigen::Vector3d test_seg_proj_p2 = find_proj(world_segments[i].a, world_segments[i].b, test_seg_p2);
 
-      if (((test_line_proj_p1-test_line_p1).norm() < tolerance) && 
-          ((test_line_proj_p2-test_line_p2).norm() < tolerance) && 
-          (test_line.radius == world_lines[i].radius)) {
+      if (((test_seg_proj_p1-test_seg_p1).norm() < tolerance) && 
+          ((test_seg_proj_p2-test_seg_p2).norm() < tolerance) && 
+          (seg.radius == world_segments[i].radius)) {
 
         if (VERBOSE > NONE){
-          ROS_INFO("Lines are close, checking for similarity");
+          ROS_INFO("Segments are close, checking for similarity");
         }
 
-        Eigen::Vector3d new_world_line_a = (test_line_proj_p1+test_line_p1)/2;
-        Eigen::Vector3d new_world_line_b = ((test_line_proj_p2+test_line_p2)/2 - (test_line_proj_p1+test_line_p1)/2).normalized();
+        Eigen::Vector3d new_world_seg_a = (test_seg_proj_p1+test_seg_p1)/2;
+        Eigen::Vector3d new_world_seg_b = ((test_seg_proj_p2+test_seg_p2)/2 - (test_seg_proj_p1+test_seg_p1)/2).normalized();
 
-        Eigen::Vector3d test_line_proj_p1 = find_proj(new_world_line_a, new_world_line_b, test_line_p1);
-        Eigen::Vector3d test_line_proj_p2 = find_proj(new_world_line_a, new_world_line_b, test_line_p2);
-        Eigen::Vector3d existing_line_proj_p1 = find_proj(new_world_line_a, new_world_line_b, existing_line_p1);
-        Eigen::Vector3d existing_line_proj_p2 = find_proj(new_world_line_a, new_world_line_b, existing_line_p2);
+        Eigen::Vector3d test_seg_proj_p1 = find_proj(new_world_seg_a, new_world_seg_b, test_seg_p1);
+        Eigen::Vector3d test_seg_proj_p2 = find_proj(new_world_seg_a, new_world_seg_b, test_seg_p2);
+        Eigen::Vector3d world_seg_proj_p1 = find_proj(new_world_seg_a, new_world_seg_b, world_seg_p1);
+        Eigen::Vector3d world_seg_proj_p2 = find_proj(new_world_seg_a, new_world_seg_b, world_seg_p2);
 
-        double test_line_proj_t1 = (test_line_proj_p1.x() - new_world_line_a.x()) / new_world_line_b.x();
-        double test_line_proj_t2 = (test_line_proj_p2.x() - new_world_line_a.x()) / new_world_line_b.x();
-        double existing_line_proj_t1 = (existing_line_proj_p1.x() - new_world_line_a.x()) / new_world_line_b.x();
-        double existing_line_proj_t2 = (existing_line_proj_p2.x() - new_world_line_a.x()) / new_world_line_b.x();
+        double test_seg_proj_t1 = (test_seg_proj_p1.x() - new_world_seg_a.x()) / new_world_seg_b.x();
+        double test_seg_proj_t2 = (test_seg_proj_p2.x() - new_world_seg_a.x()) / new_world_seg_b.x();
+        double world_seg_proj_t1 = (world_seg_proj_p1.x() - new_world_seg_a.x()) / new_world_seg_b.x();
+        double world_seg_proj_t2 = (world_seg_proj_p2.x() - new_world_seg_a.x()) / new_world_seg_b.x();
         
-        if (!(std::min(test_line_proj_t1, test_line_proj_t2)>std::max(existing_line_proj_t1, existing_line_proj_t2)) ||
-              (std::max(test_line_proj_t1, test_line_proj_t2)<std::min(existing_line_proj_t1, existing_line_proj_t2))){
+        if (!(std::min(test_seg_proj_t1, test_seg_proj_t2)>std::max(world_seg_proj_t1, world_seg_proj_t2)) ||
+              (std::max(test_seg_proj_t1, test_seg_proj_t2)<std::min(world_seg_proj_t1, world_seg_proj_t2))){
 
           if (VERBOSE > NONE){
             ROS_INFO("The 2 segments are similar");
           }
 
-          addLine = false;
+          add_seg = false;
 
-          world_lines[i].a = new_world_line_a;
-          world_lines[i].b = new_world_line_b;
+          world_segments[i].a = new_world_seg_a;
+          world_segments[i].b = new_world_seg_b;
 
-          std::vector<double> list_t = {test_line_proj_t1, test_line_proj_t2, existing_line_proj_t1, existing_line_proj_t2};
-          world_lines[i].t_max = *std::max_element(list_t.begin(), list_t.end());
-          world_lines[i].t_min = *std::min_element(list_t.begin(), list_t.end());
-          world_lines[i].radius = test_line.radius;
-          world_lines[i].points.insert(world_lines[i].points.end(), test_line.points.begin(), test_line.points.end());
+          std::vector<double> list_t = {test_seg_proj_t1, test_seg_proj_t2, world_seg_proj_t1, world_seg_proj_t2};
+          world_segments[i].t_max = *std::max_element(list_t.begin(), list_t.end());
+          world_segments[i].t_min = *std::min_element(list_t.begin(), list_t.end());
+          world_segments[i].radius = seg.radius;
+          world_segments[i].points.insert(world_segments[i].points.end(), seg.points.begin(), seg.points.end());
 
           break;
         }
       } else if (VERBOSE > NONE){
-        ROS_INFO("Lines are not close");
+        ROS_INFO("Segments are not close");
       }
     }
-    if (addLine) {
-      world_lines.push_back(test_line);
+    if (add_seg) {
+      world_segments.push_back(seg);
     }
   }
 }
@@ -384,63 +383,63 @@ void PtCdProcessing::structureOutput(){
 
   // initiate variables
   struct_segm.clear();
-  size_t numLines = world_lines.size();
-  intersection_matrix.resize(numLines);
-  for (size_t i = 0; i < numLines; ++i) {
-      intersection_matrix[i].resize(numLines, std::make_tuple(-1.0, -1.0));
+  size_t nb_segments = world_segments.size();
+  intersection_matrix.resize(nb_segments);
+  for (size_t i = 0; i < nb_segments; ++i) {
+      intersection_matrix[i].resize(nb_segments, std::make_tuple(-1.0, -1.0));
   }
 
-  for (size_t i = 0; i < world_lines.size(); ++i) {
-    const segment& existing_line_1 = world_lines[i];
+  for (size_t i = 0; i < world_segments.size(); ++i) {
+    const segment& world_seg_1 = world_segments[i];
     bool hasIntersection = false;
 
-    for (size_t j = i + 1; j < world_lines.size(); ++j) {
-      const segment& existing_line_2 = world_lines[j];
+    for (size_t j = i + 1; j < world_segments.size(); ++j) {
+      const segment& world_seg_2 = world_segments[j];
 
-      double tolerance = 2*sqrt(3)*leaf_size + 2*(existing_line_1.radius + existing_line_2.radius)/2;
+      double tolerance = 2*sqrt(3)*leaf_size + 2*(world_seg_1.radius + world_seg_2.radius)/2;
 
-      Eigen::Vector3d existing_line_1_p1 = existing_line_1.t_min * existing_line_1.b + existing_line_1.a;
-      Eigen::Vector3d existing_line_2_p1 = existing_line_2.t_min * existing_line_2.b + existing_line_2.a;
+      Eigen::Vector3d world_seg_1_p1 = world_seg_1.t_min * world_seg_1.b + world_seg_1.a;
+      Eigen::Vector3d world_seg_2_p1 = world_seg_2.t_min * world_seg_2.b + world_seg_2.a;
 
-      Eigen::Vector3d cross_prod = existing_line_2.b.cross(existing_line_1.b);
+      Eigen::Vector3d cross_prod = world_seg_2.b.cross(world_seg_1.b);
       if (cross_prod.norm() < 1e-6) {
         if (VERBOSE > INFO)
-          ROS_WARN("Lines are parallel, skipping intersection check");
+          ROS_WARN("Segments are parallel, skipping intersection check");
         continue;
       }
       cross_prod.normalize();
 
-      Eigen::Vector3d RHS = existing_line_2_p1 - existing_line_1_p1;
+      Eigen::Vector3d RHS = world_seg_2_p1 - world_seg_1_p1;
       Eigen::Matrix3d LHS;
-      LHS << existing_line_1.b, -existing_line_2.b, cross_prod;
+      LHS << world_seg_1.b, -world_seg_2.b, cross_prod;
 
       Eigen::Vector3d solution = LHS.colPivHouseholderQr().solve(RHS);
       
-      double dist_lines = abs(solution[2] * cross_prod.norm());
+      double dist_intersection = abs(solution[2] * cross_prod.norm());
 
 
-      if (((solution[0] >= existing_line_1.t_min && solution[0] <= existing_line_1.t_max) &&
-          (solution[1] > existing_line_2.t_min && solution[1] < existing_line_2.t_max)) &&
-          dist_lines < tolerance) {
+      if (((solution[0] >= world_seg_1.t_min && solution[0] <= world_seg_1.t_max) &&
+          (solution[1] > world_seg_2.t_min && solution[1] < world_seg_2.t_max)) &&
+          dist_intersection < tolerance) {
 
-        Eigen::Vector3d intersection_point = existing_line_1_p1 + solution[0] * existing_line_1.b;
+        Eigen::Vector3d intersection_point = world_seg_1_p1 + solution[0] * world_seg_1.b;
 
         // Create new segments for each segment at the intersection point
-        segment new_line_1 = existing_line_1;
-        new_line_1.t_max = solution[0];
-        struct_segm.push_back(new_line_1);
+        segment new_seg_1 = world_seg_1;
+        new_seg_1.t_max = solution[0];
+        struct_segm.push_back(new_seg_1);
 
-        segment new_line_1_part2 = existing_line_1;
-        new_line_1_part2.t_min = solution[0];
-        struct_segm.push_back(new_line_1_part2);
+        segment new_seg_1_part2 = world_seg_1;
+        new_seg_1_part2.t_min = solution[0];
+        struct_segm.push_back(new_seg_1_part2);
 
-        segment new_line_2 = existing_line_2;
-        new_line_2.t_max = solution[1];
-        struct_segm.push_back(new_line_2);
+        segment new_seg_2 = world_seg_2;
+        new_seg_2.t_max = solution[1];
+        struct_segm.push_back(new_seg_2);
 
-        segment new_line_2_part2 = existing_line_2;
-        new_line_2_part2.t_min = solution[1];
-        struct_segm.push_back(new_line_2_part2);
+        segment new_seg_2_part2 = world_seg_2;
+        new_seg_2_part2.t_min = solution[1];
+        struct_segm.push_back(new_seg_2_part2);
 
         struct_joints.push_back(intersection_point);
 
@@ -452,12 +451,12 @@ void PtCdProcessing::structureOutput(){
     }
     if (!hasIntersection) {
     // If no intersection is found, add the original segment to the output
-      struct_segm.push_back(existing_line_1);
+      struct_segm.push_back(world_seg_1);
     }
   }
 }
 
-// Publish the points used, and the computed lines as cylinders in RViz
+// Publish the points used, and the computed segments as cylinders in RViz
 void PtCdProcessing::visualization() {
   // Create a pointcloud to hold the points used for Hough
   sensor_msgs::PointCloud2 output_hough;
@@ -466,7 +465,7 @@ void PtCdProcessing::visualization() {
   visualization_msgs::MarkerArray markers;
     
 
-  // Loop through the computed lines and create a cylinder for each segment
+  // Loop through the computed segments and create a cylinder for each segment
   for (size_t i = 0; i < struct_segm.size(); i++) {
     for (const Eigen::Vector3d& point : struct_segm[i].points){
       pcl::PointXYZ p_pcl;
@@ -529,9 +528,9 @@ void PtCdProcessing::visualization() {
       double t1, t2;
       std::tie(t1, t2) = intersection_matrix[i][j];
 
-      // Check if an intersection exists between line i and line j
+      // Check if an intersection exists between seg i and j
       if (t1 != -1.0 && t2 != -1.0) {
-          Eigen::Vector3d intersection_point = world_lines[i].a + t1 * world_lines[i].b;
+          Eigen::Vector3d intersection_point = world_segments[i].a + t1 * world_segments[i].b;
 
           visualization_msgs::Marker sphere;
           sphere.header.frame_id = "mocap";
@@ -567,5 +566,5 @@ void PtCdProcessing::visualization() {
   hough_pc_pub.publish(output_hough);
 
   // Publish the marker array containing the cylinders
-  computed_lines_pub.publish(markers);
+  marker_pub.publish(markers);
 }

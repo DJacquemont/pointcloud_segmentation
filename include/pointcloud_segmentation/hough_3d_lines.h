@@ -154,10 +154,17 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<segment>& compu
   X.getMinMax3D(&minP, &maxP);
   d = (maxP-minP).norm();
   if (d == 0.0) {
+    ROS_WARN("All points in point cloud identical");
     return 1;
   }
   X.shiftToOrigin();
   X.getMinMax3D(&minPshifted, &maxPshifted);
+
+  if (opt_dx >= d) {
+    ROS_WARN("dx too large");
+    return 1;
+  }
+
 
   double num_x = floor(d / opt_dx + 0.5);
   double num_cells = num_x * num_x * num_directions[granularity];
@@ -167,6 +174,10 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<segment>& compu
   try {
     hough = new Hough(minPshifted, maxPshifted, opt_dx);
   } catch (const std::exception &e) {
+    ROS_WARN("Cannot allocate memory for %.0f Hough cells"
+            " (%.2f MB)", num_cells, 
+            (double(num_cells) / 1000000.0) * sizeof(unsigned int));
+
     return 1;
   }
   hough->add(X);

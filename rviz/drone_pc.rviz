@@ -208,7 +208,7 @@ Visualization Manager:
       Value: false
     - Class: rviz/MarkerArray
       Enabled: true
-      Marker Topic: computed_lines
+      Marker Topic: markers
       Name: MarkerArray
       Namespaces:
         {}
