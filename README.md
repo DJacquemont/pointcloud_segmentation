@@ -1,9 +1,21 @@
-# pointcloud_segmentation
+# Point Cloud Segmentation of Infrastructural Steel Elements
 
-## Dependencies
+## Overview
+
+This project focuses on developing a real-time ROS segmentation pipeline. The project utilizes a Time of Flight (ToF) camera mounted on a Micro Aerial Vehicle (MAV) to generate 3D point-cloud data, which is then processed to extract 3D structures.
+
+The core of this project is to adapt and integrate the [`hough-3d-lines`](https://github.com/LucasWaelti/hough-3d-lines) C++ library into a ROS node for real-time operation. The library applies the 3D Hough Transform for effective line segmentation in 3D point clouds. 
+
+## Installation and Setup
+
+### Prerequisites
+- Ubuntu 20.04
+- Webots 2023a
+- C++ Compiler with C++14 support
 - [auto_pilot](https://gitlab.epfl.ch/waelti/auto_pilot) package (drone and sensors simulation)
-
-## Submodules
+- ROS Noetic
+- Eigen3 library
+- PCL library
 
 This repo includes the following submodules:
 - [hough-3d-lines](https://github.com/LucasWaelti/hough-3d-lines) (cloned with ssh)
@@ -13,13 +25,50 @@ To update the submodules (typically after cloning this repo), run the command:
 git submodule update --init --recursive
 ```
 
-## Getting started
+### Getting started
 
-To launch the package and the AutoPilot package use
-```roslaunch pointcloud_segmentation all.launch```
+#### Simulation
 
-To run only the segmentation node use 
-```rosrun pointcloud_segmentation pointcloud_segmentation_node```
+First open your favorite simulation world on webots 2023. 
 
-To run only the pointcloud TF transform broadcaster use
-```rosrun pointcloud_segmentation pointcloud_tfbr_node```
+To launch all the packages in the simulation world `flying_arena_ros_tower.wbt`, with the waypoints `wp_tower.csv`
+```bash
+roslaunch pointcloud_segmentation all.launch
+```
+
+To launch all the packages in the simulation world `flying_arena_ros_mockup.wbt`, with the waypoints `wp_mockup.csv`
+```bash
+roslaunch pointcloud_segmentation all.launch waypoints:=wp_mockup.csv
+```
+
+To launch all the packages in the simulation world `flying_arena_ros_obs.wbt`
+```bash
+roslaunch pointcloud_segmentation all.launch trajectory:=eight
+```
+#### Standalone
+
+To only run the pointcloud segmentation node 
+```bash
+rosrun pointcloud_segmentation pointcloud_segmentation_node
+```
+
+To only run the pointcloud TF transform broadcaster
+```bash
+rosrun pointcloud_segmentation pointcloud_tfbr_node
+```
+
+
+## Implementation Details
+
+### Key Components
+- **Hough-3D-Lines Library**: An open-source C++ library used for 3D line segmentation using the Hough Transform. Adapted and enhanced for this project.
+- **ROS Node Integration**: The library is wrapped within a ROS node, allowing for real-time data processing and interaction with other ROS components.
+- **PointCloud Processing**: Includes pre-processing steps like filtering and segmentation on the 3D point-cloud data received from the ToF camera.
+
+### Pipeline Overview
+1. **Data Acquisition**: 3D point cloud data is captured by the ToF camera mounted on the MAV.
+2. **Pre-processing**: Raw data is filtered to remove noise and irrelevant information.
+3. **Segmentation**: The Hough-3D-Lines library processes the filtered data to identify and extract line segments.
+4. **Post-processing**: Extracted lines are analyzed to build a structural representation of the environment.
+5. **Visualization**: Real-time visualization of the segmented lines and structures is provided in RViz.
+

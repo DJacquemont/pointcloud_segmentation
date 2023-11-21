@@ -41,7 +41,7 @@ using Eigen::MatrixXf;
 //   std::vector<Eigen::Vector3d> points;
 // };
 
-struct line {
+struct segment {
   // Eigen::Vector3d p1, p2;
   Eigen::Vector3d a, b;
   double t_min, t_max;
@@ -115,7 +115,7 @@ double orthogonal_LSQ(const PointCloud &pc, Vector3d* a, Vector3d* b){
 }
 
 // Method computing 3d lines with the Hough transform
-int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<line>& computed_lines){
+int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<segment>& computed_lines, const double opt_dx, const std::vector<double> radius_sizes, const int VERBOSE){
 
   PointCloud X;
   Vector3d point;
@@ -138,14 +138,12 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<line>& computed
   }
 
   // default parameter values
-  double opt_dx = 0.05;
-  int opt_nlines = 4;
-  int opt_minvotes = 20;
-  int opt_verbose = 0;
+  const int opt_nlines = 10;
+  const int opt_minvotes = 20;
 
   // number of icosahedron subdivisions for direction discretization
-  int granularity = 4;
-  int num_directions[7] = {12, 21, 81, 321, 1281, 5121, 20481};
+  const int granularity = 4;
+  const int num_directions[7] = {12, 21, 81, 321, 1281, 5121, 20481};
 
   // bounding box of point cloud
   Vector3d minP, maxP, minPshifted, maxPshifted;
@@ -156,39 +154,20 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<line>& computed
   X.getMinMax3D(&minP, &maxP);
   d = (maxP-minP).norm();
   if (d == 0.0) {
-    ROS_INFO("ERROR - all points in point cloud identical");
     return 1;
   }
   X.shiftToOrigin();
   X.getMinMax3D(&minPshifted, &maxPshifted);
 
-  // estimate size of Hough space
-  if (opt_dx == 0.0) {
-    opt_dx = d / 64.0;
-  }
-  else if (opt_dx >= d) {
-    ROS_INFO("ERROR - dx too large");
-    return 1;
-  }
   double num_x = floor(d / opt_dx + 0.5);
   double num_cells = num_x * num_x * num_directions[granularity];
-  if (opt_verbose) {
-    ROS_INFO("x'y' value range is %f in %.0f steps of width dx=%f",
-           d, num_x, opt_dx);
-    ROS_INFO("Hough space has %.0f cells taking %.2f MB memory space",
-           num_cells, num_cells * sizeof(unsigned int) / 1000000.0);
-  }
 
   // first Hough transform
   Hough* hough;
   try {
     hough = new Hough(minPshifted, maxPshifted, opt_dx);
   } catch (const std::exception &e) {
-    
-    ROS_INFO("ERROR - cannot allocate memory for %.0f Hough cells"
-            " (%.2f MB)", num_cells, 
-            (double(num_cells) / 1000000.0) * sizeof(unsigned int));
-    return 2;
+    return 1;
   }
   hough->add(X);
   
@@ -206,11 +185,6 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<line>& computed
     hough->subtract(Y); // do it here to save one call
 
     nvotes = hough->getLine(&a, &b);
-    if (opt_verbose > 1) {
-      Vector3d p = a + X.shift;
-      ROS_INFO( "Highest number of Hough votes is %i for the following line:", nvotes);
-      ROS_INFO( "a=(%f,%f,%f), b=(%f,%f,%f)", p.x, p.y, p.z, b.x, b.y, b.z);
-    }
 
     X.pointsCloseToLine(a, b, opt_dx, &Y);
 
@@ -227,10 +201,6 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<line>& computed
     a = a + X.shift;
 
     nlines++;
-
-    if (opt_verbose)
-      ROS_INFO("npoints=%lu, a=(%f,%f,%f), b=(%f,%f,%f)",
-                Y.points.size(), a.x, a.y, a.z, b.x, b.y, b.z);
 
     // find t of the line segment, and the corresponding norm of p
     std::vector<double> p_radius;
@@ -252,28 +222,39 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<line>& computed
       points.push_back(point_eigen);
       }
 
-    std::sort(p_radius.begin(), p_radius.end());
     double radius = std::max(p_radius[0], p_radius[p_radius.size()-1]);
 
-    double maxDifference = std::abs(p_norm[1] - p_norm[0]);
+    double closest_radius = radius_sizes[0];
+    double min_radius_diff = std::abs(radius - radius_sizes[0]);
+    for (double r : radius_sizes) {
+      double currentDifference = std::abs(radius - r);
+      if (currentDifference < min_radius_diff) {
+          min_radius_diff = currentDifference;
+          closest_radius = r;
+      }
+    }
+
+
+    double max_pts_spacing = std::abs(p_norm[1] - p_norm[0]);
     for (size_t i = 1; i < p_norm.size() - 1; ++i) {
         double difference = std::abs(p_norm[i + 1] - p_norm[i]);
-        if (difference > maxDifference)
-            maxDifference = difference;
+        if (difference > max_pts_spacing)
+            max_pts_spacing = difference;
     }
 
     // add line to vector
-    if (maxDifference < 0.1){
+    if (max_pts_spacing < (2*std::max(radius_sizes[0], radius_sizes[radius_sizes.size()-1]) + opt_dx) && 
+        min_radius_diff < opt_dx){
 
       Eigen::Vector3d p1 = a_eigen + t_value[0]*b_eigen;
       Eigen::Vector3d p2 = a_eigen + t_value[t_value.size()-1]*b_eigen;
 
-      line l;
+      segment l;
       l.a = a_eigen;
       l.b = b_eigen;
       l.t_min = t_value[0];
       l.t_max = t_value[t_value.size()-1];
-      l.radius = radius;
+      l.radius = closest_radius;      
       l.points = points;
 
       computed_lines.push_back(l);

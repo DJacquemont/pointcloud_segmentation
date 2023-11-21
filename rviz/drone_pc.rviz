@@ -23,7 +23,7 @@ Panels:
   - Class: rviz/Time
     Name: Time
     SyncMode: 0
-    SyncSource: PointCloud2 - Filtered
+    SyncSource: ""
 Preferences:
   PromptSaveOnExit: true
 Toolbars:
@@ -56,12 +56,6 @@ Visualization Manager:
       Frame Timeout: 15
       Frames:
         All Enabled: true
-        map:
-          Value: true
-        mocap:
-          Value: true
-        world:
-          Value: true
       Marker Alpha: 1
       Marker Scale: 1
       Name: TF
@@ -69,10 +63,7 @@ Visualization Manager:
       Show Axes: true
       Show Names: true
       Tree:
-        map:
-          mocap:
-            world:
-              {}
+        {}
       Update Interval: 0
       Value: true
     - Alpha: 1
@@ -180,7 +171,7 @@ Visualization Manager:
       Queue Size: 10
       Selectable: true
       Size (Pixels): 3
-      Size (m): 0.029999999329447746
+      Size (m): 0.009999999776482582
       Style: Flat Squares
       Topic: hough_pointcloud
       Unreliable: false
@@ -220,7 +211,7 @@ Visualization Manager:
       Marker Topic: computed_lines
       Name: MarkerArray
       Namespaces:
-        cylinders: true
+        {}
       Queue Size: 100
       Value: true
   Enabled: true
@@ -251,7 +242,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 3.3030686378479004
+      Distance: 6.1140851974487305
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -259,17 +250,17 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: -1.4986547231674194
-        Y: -0.10865318030118942
-        Z: 1.856374740600586
+        X: -0.09698225557804108
+        Y: 0.2545620799064636
+        Z: 1.3967033624649048
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.4647971987724304
+      Pitch: 0.3697972893714905
       Target Frame: <Fixed Frame>
-      Yaw: 3.1322898864746094
+      Yaw: 1.5672852993011475
     Saved: ~
 Window Geometry:
   Displays:
@@ -288,4 +279,4 @@ Window Geometry:
     collapsed: true
   Width: 1048
   X: 48
-  Y: 53
+  Y: 27

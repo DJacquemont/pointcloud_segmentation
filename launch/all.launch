@@ -13,7 +13,7 @@
     <arg name="flight_parameters" default="starling.fp" /> <!-- Autopilot flight parameters file to use -->
     <arg name="imu_id"      default="1" />              <!-- IMU id to use -->
     <arg name="trajectory"  default="waypoints" />      <!-- Trajectory to follow -->
-    <arg name="waypoints"   default="wp_corners.csv" /> <!-- Waypoints file to use -->
+    <arg name="waypoints"   default="wp_tower.csv" /> <!-- Waypoints file to use -->
 
     <!-- visualization -->
     <arg name="rviz" default="true" /> <!-- Launch rviz -->
