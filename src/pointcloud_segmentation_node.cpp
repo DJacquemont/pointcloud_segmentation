@@ -14,14 +14,23 @@
 #include "hough_3d_lines.h"
 
 #include <chrono>
+
 using namespace std::chrono;
 
+enum verbose {NONE, INFO, WARN};
 
+
+const int VERBOSE = WARN;
 const size_t MAX_POSE_HISTORY_SIZE = 50;
 const double FLOOR_TRIM_HEIGHT = 0.3;
+const double RADIUS_2_LENGTH_RATIO = 25;
+const double LEARNING_RATE = 0.05;
+const std::vector<double> RADIUS_SIZES = {0.1}; // 0.25, 0.07, 0.05, 0.1, 0.03
+const double LEAF_SIZE = std::min(RADIUS_SIZES[0], RADIUS_SIZES[RADIUS_SIZES.size()-1]);
+const double OPT_DX = sqrt(3)*LEAF_SIZE;
+// const int OPT_MINVOTES = 1/2*(2*std::max(RADIUS_SIZES[0], RADIUS_SIZES[RADIUS_SIZES.size()-1]) * (1+RADIUS_2_LENGTH_RATIO))/(LEAF_SIZE*LEAF_SIZE);
+const int OPT_MINVOTES = 20;
 
-enum verbose {NONE, INFO, WARN};
-const int VERBOSE = WARN;
 
 // structure storing the drone's pose with a timestamp
 struct PoseWithTimestamp {
@@ -89,8 +98,7 @@ private:
   std::vector<std::vector<std::tuple<double, double>>> intersection_matrix;
 
   // Parameters
-  const std::vector<double> radius_sizes = {0.1}; // 0.2, 0.07, 0.05, 0.1, 0.03
-  const double leaf_size = std::min(radius_sizes[0], radius_sizes[radius_sizes.size()-1]);
+  // const double LEAF_SIZE = std::min(RADIUS_SIZES[0], RADIUS_SIZES[RADIUS_SIZES.size()-1]);
 };
 
 //--------------------------------------------------------------------
@@ -100,6 +108,7 @@ private:
 int main(int argc, char *argv[])
 {
   ROS_INFO("Pointcloud semgmentation node starting");
+  ROS_INFO("OPT_MINVOTES: %i", OPT_MINVOTES);
 
   ros::init(argc, argv, "pointcloud_seg");
 
@@ -151,8 +160,8 @@ void PtCdProcessing::pointcloudCallback(const sensor_msgs::PointCloud2::ConstPtr
 
   // segment extraction with the Hough transform
   std::vector<segment> drone_segments;
-  const double opt_dx = sqrt(3)*leaf_size; // optimal discretization step
-  if (hough3dlines(*filtered_cloud_XYZ, drone_segments, opt_dx, radius_sizes, VERBOSE) && VERBOSE > INFO){
+  // const double OPT_DX = sqrt(3)*LEAF_SIZE; // optimal discretization step
+  if (hough3dlines(*filtered_cloud_XYZ, drone_segments, OPT_DX, RADIUS_SIZES, OPT_MINVOTES, VERBOSE) && VERBOSE > INFO){
     ROS_WARN("Unable to perform the Hough transform");
   }
 
@@ -186,24 +195,24 @@ void PtCdProcessing::pointcloudCallback(const sensor_msgs::PointCloud2::ConstPtr
 // finds the closest correct pointcloud pose to the given timestamp
 void PtCdProcessing::findClosestPose(const ros::Time& timestamp) {
 
-  PoseWithTimestamp closestPose;
-  double minTimeDiff = std::numeric_limits<double>::max();
+  PoseWithTimestamp closest_pose;
+  double min_time_diff = std::numeric_limits<double>::max();
 
   for (const auto& pose : poseHistory) {
-    double timeDiff = std::abs((pose.timestamp - timestamp).toSec());
+    double time_diff = std::abs((pose.timestamp - timestamp).toSec());
 
-    if (timeDiff < minTimeDiff) {
-      minTimeDiff = timeDiff;
-      closestPose = pose;
+    if (time_diff < min_time_diff) {
+      min_time_diff = time_diff;
+      closest_pose = pose;
     }
   }
 
-  if (minTimeDiff > 0.1 && VERBOSE > INFO) {
+  if (min_time_diff > 0.1 && VERBOSE > INFO) {
     ROS_WARN("No pose found close enough to the pointcloud timestamp");
   }
 
-  drone_position = closestPose.position;
-  drone_orientation = closestPose.orientation;
+  drone_position = closest_pose.position;
+  drone_orientation = closest_pose.orientation;
 }
 
 
@@ -229,7 +238,7 @@ void PtCdProcessing::cloudFiltering(pcl::PCLPointCloud2::Ptr& cloud, pcl::PointC
 
   pcl::VoxelGrid<pcl::PCLPointCloud2> voxel_grid;
   voxel_grid.setInputCloud(filtered_cloud);
-  voxel_grid.setLeafSize(leaf_size, leaf_size, leaf_size);
+  voxel_grid.setLeafSize(LEAF_SIZE, LEAF_SIZE, LEAF_SIZE);
   voxel_grid.filter(*filtered_cloud);
 
   pcl::fromPCLPointCloud2(*filtered_cloud, *filtered_cloud_XYZ );
@@ -287,8 +296,7 @@ int PtCdProcessing::cloudLinearShapeCheck(pcl::PointCloud<pcl::PointXYZ>::Ptr cl
   Eigen::Vector3d eigenvalues = pca.getEigenValues().cast<double>();
 
   // Assess the distribution of points based on eigenvalues
-  double linearityThreshold = 25;  // Define an appropriate threshold
-  if (eigenvalues[0] > linearityThreshold * (eigenvalues[1] + eigenvalues[2])) {
+  if (eigenvalues[0] > RADIUS_2_LENGTH_RATIO * (eigenvalues[1] + eigenvalues[2])/2) {
     return 0;
   } else {
     if (VERBOSE > INFO)
@@ -301,10 +309,11 @@ int PtCdProcessing::cloudLinearShapeCheck(pcl::PointCloud<pcl::PointXYZ>::Ptr cl
 void PtCdProcessing::segIdentification(std::vector<segment>& drone_segments){
 
   for (const segment& seg : drone_segments) {
-    double max_dx = 2*sqrt(3)*leaf_size;
-    double tolerance = 2*max_dx + 2*seg.radius;
-    // double tolerance = 2*seg.radius;
 
+    Eigen::Vector3d test_seg_p1 = seg.t_min * seg.b + seg.a;
+    Eigen::Vector3d test_seg_p2 = seg.t_max * seg.b + seg.a;
+
+    double epsilon = 2*OPT_DX + 2*(test_seg_p2-test_seg_p1).norm()/RADIUS_2_LENGTH_RATIO;
     bool add_seg = true;
 
     // Extract points from seg and create a PCL point cloud
@@ -320,24 +329,23 @@ void PtCdProcessing::segIdentification(std::vector<segment>& drone_segments){
     }
 
     for (size_t i = 0; i < world_segments.size(); ++i) {
-      Eigen::Vector3d test_seg_p1 = seg.t_min * seg.b + seg.a;
-      Eigen::Vector3d test_seg_p2 = seg.t_max * seg.b + seg.a;
       Eigen::Vector3d world_seg_p1 = world_segments[i].t_min * world_segments[i].b + world_segments[i].a;
       Eigen::Vector3d world_seg_p2 = world_segments[i].t_max * world_segments[i].b + world_segments[i].a;
 
       Eigen::Vector3d test_seg_proj_p1 = find_proj(world_segments[i].a, world_segments[i].b, test_seg_p1);
       Eigen::Vector3d test_seg_proj_p2 = find_proj(world_segments[i].a, world_segments[i].b, test_seg_p2);
 
-      if (((test_seg_proj_p1-test_seg_p1).norm() < tolerance) && 
-          ((test_seg_proj_p2-test_seg_p2).norm() < tolerance) && 
-          (seg.radius == world_segments[i].radius)) {
+      if (((test_seg_proj_p1-test_seg_p1).norm() < epsilon) && 
+          ((test_seg_proj_p2-test_seg_p2).norm() < epsilon) && 
+          (seg.radius == world_segments[i].radius)){
 
         if (VERBOSE > NONE){
           ROS_INFO("Segments are close, checking for similarity");
         }
 
-        Eigen::Vector3d new_world_seg_a = (test_seg_proj_p1+test_seg_p1)/2;
-        Eigen::Vector3d new_world_seg_b = ((test_seg_proj_p2+test_seg_p2)/2 - (test_seg_proj_p1+test_seg_p1)/2).normalized();
+        Eigen::Vector3d new_world_seg_a = test_seg_proj_p1*(1-LEARNING_RATE) + test_seg_p1*LEARNING_RATE;
+        Eigen::Vector3d new_world_seg_b = ((test_seg_proj_p2*(1-LEARNING_RATE) + test_seg_p2*LEARNING_RATE) - 
+                                          (test_seg_proj_p1*(1-LEARNING_RATE) + test_seg_p1*LEARNING_RATE)).normalized();
 
         Eigen::Vector3d test_seg_proj_p1 = find_proj(new_world_seg_a, new_world_seg_b, test_seg_p1);
         Eigen::Vector3d test_seg_proj_p2 = find_proj(new_world_seg_a, new_world_seg_b, test_seg_p2);
@@ -383,6 +391,7 @@ void PtCdProcessing::structureOutput(){
 
   // initiate variables
   struct_segm.clear();
+
   size_t nb_segments = world_segments.size();
   intersection_matrix.resize(nb_segments);
   for (size_t i = 0; i < nb_segments; ++i) {
@@ -396,7 +405,7 @@ void PtCdProcessing::structureOutput(){
     for (size_t j = i + 1; j < world_segments.size(); ++j) {
       const segment& world_seg_2 = world_segments[j];
 
-      double tolerance = 2*sqrt(3)*leaf_size + 2*(world_seg_1.radius + world_seg_2.radius)/2;
+      double epsilon = 2*sqrt(3)*LEAF_SIZE + 2*(world_seg_1.radius + world_seg_2.radius)/2;
 
       Eigen::Vector3d world_seg_1_p1 = world_seg_1.t_min * world_seg_1.b + world_seg_1.a;
       Eigen::Vector3d world_seg_2_p1 = world_seg_2.t_min * world_seg_2.b + world_seg_2.a;
@@ -420,7 +429,7 @@ void PtCdProcessing::structureOutput(){
 
       if (((solution[0] >= world_seg_1.t_min && solution[0] <= world_seg_1.t_max) &&
           (solution[1] > world_seg_2.t_min && solution[1] < world_seg_2.t_max)) &&
-          dist_intersection < tolerance) {
+          dist_intersection < epsilon) {
 
         Eigen::Vector3d intersection_point = world_seg_1_p1 + solution[0] * world_seg_1.b;
 
@@ -544,7 +553,7 @@ void PtCdProcessing::visualization() {
           sphere.pose.position.y = intersection_point.y();
           sphere.pose.position.z = intersection_point.z();
 
-          double sphere_radius = 3/2*std::max(radius_sizes[0], radius_sizes[radius_sizes.size()-1]);
+          double sphere_radius = 3/2*std::max(RADIUS_SIZES[0], RADIUS_SIZES[RADIUS_SIZES.size()-1]);
           sphere.scale.x = sphere_radius * 2.0;
           sphere.scale.y = sphere_radius * 2.0;
           sphere.scale.z = sphere_radius * 2.0;

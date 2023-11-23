@@ -10,36 +10,7 @@
 
 using Eigen::MatrixXf;
 
-// class line
-// {
-// public:
-//   void set_p1(Eigen::Vector3d p1){
-//     this->t_min = (p1.x() - this->a.x()) / this->b.x();
-//   }
-
-//   void set_p2(Eigen::Vector3d p2){
-//     this->t_max = (p2.x() - this->a.x()) / this->b.x();
-//   }
-
-//   Eigen::Vector3d p1(){
-//     Eigen::Vector3d p1 = this->a + this->t_min * this->b;
-//     return p1;
-//   }
-
-//   Eigen::Vector3d p2(){
-//     Eigen::Vector3d p2 = this->a + this->t_max * this->b;
-//     return p2;
-//   }
-
-//   void set_points(std::vector<Eigen::Vector3d> points){
-//     this->points = points;
-//   }
-
-//   Eigen::Vector3d a, b;
-//   double t_min, t_max;
-//   double radius;
-//   std::vector<Eigen::Vector3d> points;
-// };
+const int OPT_NLINES = 5;
 
 struct segment {
   // Eigen::Vector3d p1, p2;
@@ -115,7 +86,8 @@ double orthogonal_LSQ(const PointCloud &pc, Vector3d* a, Vector3d* b){
 }
 
 // Method computing 3d lines with the Hough transform
-int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<segment>& computed_lines, const double opt_dx, const std::vector<double> radius_sizes, const int VERBOSE){
+int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<segment>& computed_lines, 
+                  double opt_dx, std::vector<double> radius_sizes, int opt_minvotes, const int VERBOSE){
 
   PointCloud X;
   Vector3d point;
@@ -138,8 +110,7 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<segment>& compu
   }
 
   // default parameter values
-  const int opt_nlines = 10;
-  const int opt_minvotes = 20;
+  const int OPT_NLINES = 5;
 
   // number of icosahedron subdivisions for direction discretization
   const int granularity = 4;
@@ -238,9 +209,9 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<segment>& compu
     double closest_radius = radius_sizes[0];
     double min_radius_diff = std::abs(radius - radius_sizes[0]);
     for (double r : radius_sizes) {
-      double currentDifference = std::abs(radius - r);
-      if (currentDifference < min_radius_diff) {
-          min_radius_diff = currentDifference;
+      double current_difference = std::abs(radius - r);
+      if (current_difference < min_radius_diff) {
+          min_radius_diff = current_difference;
           closest_radius = r;
       }
     }
@@ -254,7 +225,7 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<segment>& compu
     }
 
     // add line to vector
-    if (max_pts_spacing < (2*std::max(radius_sizes[0], radius_sizes[radius_sizes.size()-1]) + opt_dx) && 
+    if (max_pts_spacing < 2 * 2*opt_dx && 
         min_radius_diff < opt_dx){
 
       Eigen::Vector3d p1 = a_eigen + t_value[0]*b_eigen;
@@ -274,7 +245,7 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<segment>& compu
     X.removePoints(Y);
 
   } while ((X.points.size() > 1) && 
-           ((opt_nlines == 0) || (opt_nlines > nlines)) && ros::ok());
+           ((OPT_NLINES == 0) || (OPT_NLINES > nlines)) && ros::ok());
 
   // clean up
   delete hough;
