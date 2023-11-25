@@ -1,0 +1,7 @@
+verbose_level: WARN
+max_pose_history_size: 50
+floor_trim_height: 0.3
+radius_to_length_ratio: 25
+min_pca_coeff: 0.7
+radius_sizes: [0.1]
+opt_minvotes: 30

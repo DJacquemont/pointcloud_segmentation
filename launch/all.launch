@@ -18,7 +18,11 @@
     <!-- visualization -->
     <arg name="rviz" default="true" /> <!-- Launch rviz -->
 
-    <rosparam param="/use_sim_time"> true </rosparam> <!-- Use simulation time, the drone_controller_node will publish the /clock topic -->
+    <!-- Use simulation time, the drone_controller_node will publish the /clock topic -->
+    <rosparam param="/use_sim_time"> true </rosparam>
+
+    <!-- Load parameters from config.yaml -->
+    <rosparam file="$(find pointcloud_segmentation)/config_pc_seg/config.yaml" command="load"/>
     
     <!-- Main autopilot node, responsible for computing motor command -->
     <node pkg="auto_pilot_pkg" type="auto_pilot_node.py" name="auto_pilot_node" output="screen" 
