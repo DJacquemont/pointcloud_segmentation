@@ -51,6 +51,9 @@ public:
         }
     }
 
+    leaf_size = std::min(radius_sizes[0], radius_sizes[radius_sizes.size()-1]);
+    opt_dx = sqrt(3)*leaf_size;
+
     // Initialize subscribers and publishers
     tof_pc_sub = node.subscribe("/tof_pc", 1, &PtCdProcessing::pointcloudCallback, this);
     marker_pub = node.advertise<visualization_msgs::MarkerArray>("markers", 1);
@@ -100,14 +103,14 @@ private:
   std::vector<std::vector<std::tuple<double, double>>> intersection_matrix;
 
   // Parameters
-  int verbose_level = WARN;
-  double floor_trim_height = 0.3;
-  double min_pca_coeff = 0.7;
-  int opt_minvotes = 30;
+  int verbose_level;
+  double floor_trim_height;
+  double min_pca_coeff;
+  int opt_minvotes;
   // const int opt_minvotes = 1/2*(2*std::max(radius_sizes[0], radius_sizes[radius_sizes.size()-1]) * (1+RADIUS_2_LENGTH_RATIO))/(leaf_size*leaf_size);
-  std::vector<double> radius_sizes = {0.1}; // 0.25, 0.07, 0.05, 0.1, 0.03
-  double leaf_size = std::min(radius_sizes[0], radius_sizes[radius_sizes.size()-1]);
-  double opt_dx = sqrt(3)*leaf_size;
+  std::vector<double> radius_sizes;
+  double leaf_size;
+  double opt_dx;
 };
 
 //--------------------------------------------------------------------
@@ -140,15 +143,23 @@ void PtCdProcessing::pointcloudCallback(const sensor_msgs::PointCloud2::ConstPtr
   auto callStart = high_resolution_clock::now();
 
   // Find the closest pose in time to the point cloud's timestamp
-  geometry_msgs::TransformStamped transformStamped;
-  transformStamped = tfBuffer.lookupTransform("mocap", "world", msg->header.stamp, ros::Duration(1.0));
-  drone_position = Eigen::Vector3d(transformStamped.transform.translation.x,
-                                    transformStamped.transform.translation.y,
-                                    transformStamped.transform.translation.z);
-  drone_orientation = Eigen::Quaterniond(transformStamped.transform.rotation.w,
-                                          transformStamped.transform.rotation.x,
-                                          transformStamped.transform.rotation.y,
-                                          transformStamped.transform.rotation.z);
+  try {
+    geometry_msgs::TransformStamped transformStamped;
+    transformStamped = tfBuffer.lookupTransform("mocap", "world", msg->header.stamp, ros::Duration(1.0));
+    drone_position = Eigen::Vector3d(transformStamped.transform.translation.x,
+                                      transformStamped.transform.translation.y,
+                                      transformStamped.transform.translation.z);
+    drone_orientation = Eigen::Quaterniond(transformStamped.transform.rotation.w,
+                                            transformStamped.transform.rotation.x,
+                                            transformStamped.transform.rotation.y,
+                                            transformStamped.transform.rotation.z);
+  }
+  catch (tf2::TransformException &ex) {
+    if (verbose_level > INFO){
+      ROS_WARN("%s", ex.what());
+    }
+    return;
+  }
 
   // Filtering pointcloud
   pcl::PCLPointCloud2::Ptr cloud (new pcl::PCLPointCloud2);
@@ -275,15 +286,6 @@ Eigen::Vector3d PtCdProcessing::segPCA(const segment& seg) {
 
   // Eigenvalues are in descending order
   Eigen::Vector3d eigenvalues = pca.getEigenValues().cast<double>();
-
-  // Assess the distribution of points based on eigenvalues
-  // if (eigenvalues[0] > RADIUS_2_LENGTH_RATIO * (eigenvalues[1] + eigenvalues[2])/2) {
-  //   return 0;
-  // } else {
-  //   if (verbose_level > INFO)
-  //     ROS_WARN("Points form a dispersed structure");
-  //   return 1;
-  // }
   
   return eigenvalues;
 }
@@ -324,8 +326,6 @@ void PtCdProcessing::segIdentification(std::vector<segment>& drone_segments){
         }
 
         double learning_rate = new_pca_coeff/(world_segments[i].pca_coeff*world_segments[i].num_pca+new_pca_coeff);
-
-        std::cout << "learning_rate: " << learning_rate << std::endl;
 
         Eigen::Vector3d new_world_seg_a = test_seg_proj_p1 + learning_rate*(test_seg_p1 - test_seg_proj_p1);
         Eigen::Vector3d new_world_seg_b = (test_seg_proj_p2-test_seg_proj_p1) +
@@ -380,6 +380,8 @@ void PtCdProcessing::structureOutput(){
 
   // initiate variables
   struct_segm.clear();
+  std::vector<std::vector<std::tuple<double, double>>> empty_intersection_matrix;
+  intersection_matrix.swap(empty_intersection_matrix);
 
   size_t nb_segments = world_segments.size();
   intersection_matrix.resize(nb_segments);
@@ -394,7 +396,7 @@ void PtCdProcessing::structureOutput(){
     for (size_t j = i + 1; j < world_segments.size(); ++j) {
       const segment& world_seg_2 = world_segments[j];
 
-      double epsilon = 2*sqrt(3)*leaf_size + 2*(world_seg_1.radius + world_seg_2.radius)/2;
+      double epsilon = 2*opt_dx;
 
       Eigen::Vector3d world_seg_1_p1 = world_seg_1.t_min * world_seg_1.b + world_seg_1.a;
       Eigen::Vector3d world_seg_2_p1 = world_seg_2.t_min * world_seg_2.b + world_seg_2.a;

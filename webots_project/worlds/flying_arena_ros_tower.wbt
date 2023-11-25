@@ -9,8 +9,8 @@ WorldInfo {
   basicTimeStep 8
 }
 Viewpoint {
-  orientation 0.29683991031699 0.37615962600789 -0.8777186356712531 1.4098770830621012
-  position -2.699760559925565 9.39644218415977 7.932294608191251
+  orientation 0.37679982588869676 0.3900014313278282 -0.8401909156688693 1.667452020796688
+  position -2.7009910852013665 31.912180314350515 33.8678107955136
 }
 Background {
   skyColor [
@@ -25,7 +25,7 @@ Floor {
   }
 }
 DEF CEILING Solid {
-  translation 3.09837e-16 0 6.53
+  translation 1.18043e-15 0 13.64
   rotation 0 -1 0 3.141592653589793
   children [
     Shape {
@@ -55,12 +55,12 @@ starling {
   controller "<extern>"
 }
 Solid {
-  translation -0.95 0.67 0.67
+  translation -0.96 -0.04 0.67
   children [
     Transform {
       translation 0.92 2.20386e-06 -0.6
       rotation 1 0 0 1.5708
-      scale 0.001 0.001 0.001
+      scale 0.003 0.003 0.003
       children [
         Shape {
           appearance PBRAppearance {

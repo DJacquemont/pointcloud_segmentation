@@ -21,7 +21,7 @@
 
         <!-- Waypoint trajectories parameters -->
         <param name="plot"              value="false" />
-        <param name="waypoints_file"    value="$(find pointcloud_segmentation)/config/$(arg waypoints_file)" />
+        <param name="waypoints_file"    value="$(find pointcloud_segmentation)/config_auto_pilot/$(arg waypoints_file)" />
         <param name="no_interpolation"  value="false" />
         <param name="waypoint_velocity" value="0.5" />
         <param name="mean_velocity"     value="1.0" />

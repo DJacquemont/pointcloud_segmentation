@@ -220,15 +220,15 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<segment>& compu
 
     size_t t_density_middle = 0;
     for (double t_value : t_values) {
-        if (t_value >= t_values[round(t_values.size()/4)] &&
-            t_value <= t_values[round(t_values.size()*3/4)]) {
+        if (t_value >= t_values[std::round(t_values.size()/4)] &&
+            t_value <= t_values[std::round(t_values.size()*3/4)]) {
             ++t_density_middle;
         }
     }
 
     // add line to vector
     if (min_radius_diff < opt_dx &&
-    t_density_middle >= round(0.5*t_values.size())){
+    t_density_middle > std::ceil(0.5*t_values.size())){
 
       Eigen::Vector3d p1 = a_eigen + t_values[0]*b_eigen;
       Eigen::Vector3d p2 = a_eigen + t_values[t_values.size()-1]*b_eigen;
