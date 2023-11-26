@@ -140,7 +140,7 @@ Visualization Manager:
       Min Color: 0; 0; 0
       Name: PointCloud2 - Filtered
       Position Transformer: XYZ
-      Queue Size: 10
+      Queue Size: 0
       Selectable: true
       Size (Pixels): 3
       Size (m): 0.009999999776482582
@@ -168,7 +168,7 @@ Visualization Manager:
       Min Color: 0; 0; 0
       Name: PointCloud2 - Hough
       Position Transformer: XYZ
-      Queue Size: 10
+      Queue Size: 0
       Selectable: true
       Size (Pixels): 3
       Size (m): 0.009999999776482582
@@ -212,7 +212,7 @@ Visualization Manager:
       Name: MarkerArray
       Namespaces:
         {}
-      Queue Size: 100
+      Queue Size: 0
       Value: true
   Enabled: true
   Global Options:

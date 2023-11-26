@@ -1,10 +1,22 @@
+# vebose_level: NONE, INFO, DEBUG
 verbose_level: NONE
+
+# floor_trim_height: cut off the pointcloud below this height
 floor_trim_height: 0.3
+
+# min_pca_coeff: minimum pca coeff to be considered as a line
 min_pca_coeff: 0.9
+
+# opt_minvotes: minimum votes to be considered as a line
 opt_minvotes: 15
+
+# opt_nlines: number of lines to be detected
+opt_nlines: 5
+
+# radius_sizes: beam radius sizes
 radius_sizes:
   # - 0.1
   # - 0.25
   # - 0.07
   # - 0.05
-  - 0.06
+  - 0.05

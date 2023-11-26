@@ -43,6 +43,7 @@ public:
     node.getParam("/floor_trim_height", floor_trim_height);
     node.getParam("/min_pca_coeff", min_pca_coeff);
     node.getParam("/opt_minvotes", opt_minvotes);
+    node.getParam("/opt_nlines", opt_nlines);
     XmlRpc::XmlRpcValue radius_sizes_tmp;
     if (node.getParam("/radius_sizes", radius_sizes_tmp)) {
         radius_sizes.clear();
@@ -56,9 +57,9 @@ public:
 
     // Initialize subscribers and publishers
     tof_pc_sub = node.subscribe("/tof_pc", 1, &PtCdProcessing::pointcloudCallback, this);
-    marker_pub = node.advertise<visualization_msgs::MarkerArray>("markers", 1);
-    filtered_pc_pub = node.advertise<sensor_msgs::PointCloud2>("filtered_pointcloud", 1);
-    hough_pc_pub = node.advertise<sensor_msgs::PointCloud2>("hough_pointcloud", 1);
+    marker_pub = node.advertise<visualization_msgs::MarkerArray>("markers", 0);
+    filtered_pc_pub = node.advertise<sensor_msgs::PointCloud2>("filtered_pointcloud", 0);
+    hough_pc_pub = node.advertise<sensor_msgs::PointCloud2>("hough_pointcloud", 0);
   }
 
   // Callback function receiving & processing ToF images from the Autopilot package
@@ -74,13 +75,16 @@ public:
   Eigen::Vector3d segPCA(const segment&);
 
   // Identify intersections between segments
-  void segIdentification(std::vector<segment>& drone_segments);
+  void segFiltering(std::vector<segment>& drone_segments);
 
   // Output the structure
   void structureOutput();
 
   // Publish the points used, and the computed segments as cylinders in RViz
   void visualization();
+
+  // Clear the markers in RViz
+  void clearMarkers();
 
 private:
   ros::NodeHandle node;
@@ -107,6 +111,7 @@ private:
   double floor_trim_height;
   double min_pca_coeff;
   int opt_minvotes;
+  int opt_nlines;
   // const int opt_minvotes = 1/2*(2*std::max(radius_sizes[0], radius_sizes[radius_sizes.size()-1]) * (1+RADIUS_2_LENGTH_RATIO))/(leaf_size*leaf_size);
   std::vector<double> radius_sizes;
   double leaf_size;
@@ -170,7 +175,7 @@ void PtCdProcessing::pointcloudCallback(const sensor_msgs::PointCloud2::ConstPtr
   // segment extraction with the Hough transform
   std::vector<segment> drone_segments;
   // const double opt_dx = sqrt(3)*leaf_size; // optimal discretization step
-  if (hough3dlines(*filtered_cloud_XYZ, drone_segments, opt_dx, radius_sizes, opt_minvotes, verbose_level) && verbose_level > INFO){
+  if (hough3dlines(*filtered_cloud_XYZ, drone_segments, opt_dx, radius_sizes, opt_minvotes, opt_nlines, verbose_level) && verbose_level > INFO){
     ROS_WARN("Unable to perform the Hough transform");
   }
 
@@ -182,7 +187,17 @@ void PtCdProcessing::pointcloudCallback(const sensor_msgs::PointCloud2::ConstPtr
   drone2WorldSeg(drone_segments);
 
   // Filter the segments that already exist in the world_segments
-  segIdentification(drone_segments);
+  segFiltering(drone_segments);
+
+  if (verbose_level > NONE){
+    for (const segment& world_seg : world_segments) {
+      std::cout << "Segment number: " << &world_seg - &world_segments[0] << std::endl;
+      std::cout << "  a: " << world_seg.a.transpose() << std::endl;
+      std::cout << "  b: " << world_seg.b.transpose() << std::endl;
+      std::cout << "  t_min: " << world_seg.t_min << std::endl;
+      std::cout << "  t_max: " << world_seg.t_max << std::endl;
+    }
+  }
 
   // Identify intersections between segments, and ready the data for output
   structureOutput();
@@ -214,7 +229,7 @@ void PtCdProcessing::cloudFiltering(pcl::PCLPointCloud2::Ptr& cloud, pcl::PointC
 
   pass.setInputCloud(filtered_cloud);
   pass.setFilterFieldName("y");
-  pass.setFilterLimits(-2.0f, 2.0f);
+  pass.setFilterLimits(0.0f, 3.0f);
   pass.filter(*filtered_cloud);
 
   pass.setInputCloud(filtered_cloud);
@@ -244,14 +259,14 @@ void PtCdProcessing::drone2WorldSeg(std::vector<segment>& drone_segments){
 
   std::vector<segment> valid_segments;
 
-  for (segment& seg : drone_segments) {
+  for (segment& drone_seg : drone_segments) {
 
     // Transform the segment in the world frame
     segment test_seg;
-    test_seg.a = rotation_matrix * seg.a + drone_position;
-    test_seg.b = rotation_matrix * seg.b;
-    test_seg.t_min = seg.t_min;
-    test_seg.t_max = seg.t_max;
+    test_seg.a = rotation_matrix * drone_seg.a + drone_position;
+    test_seg.b = rotation_matrix * drone_seg.b;
+    test_seg.t_min = drone_seg.t_min;
+    test_seg.t_max = drone_seg.t_max;
 
     // Check if the segment is above the ground
     Eigen::Vector3d test_seg_p1 = test_seg.t_min * test_seg.b + test_seg.a;
@@ -259,8 +274,8 @@ void PtCdProcessing::drone2WorldSeg(std::vector<segment>& drone_segments){
 
     if (test_seg_p1.z() > floor_trim_height || test_seg_p2.z() > floor_trim_height){
 
-      test_seg.radius = seg.radius;
-      for (const Eigen::Vector3d& point : seg.points){
+      test_seg.radius = drone_seg.radius;
+      for (const Eigen::Vector3d& point : drone_seg.points){
         test_seg.points.push_back(rotation_matrix * point + drone_position);
       }
 
@@ -272,11 +287,11 @@ void PtCdProcessing::drone2WorldSeg(std::vector<segment>& drone_segments){
 }
 
 
-Eigen::Vector3d PtCdProcessing::segPCA(const segment& seg) {
+Eigen::Vector3d PtCdProcessing::segPCA(const segment& drone_seg) {
 
-  // Extract points from seg and create a PCL point cloud
+  // Extract points from drone_seg and create a PCL point cloud
   pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
-  for (const auto& point : seg.points) {
+  for (const auto& point : drone_seg.points) {
     cloud->points.push_back(pcl::PointXYZ(point.x(), point.y(), point.z()));
   }
 
@@ -291,16 +306,15 @@ Eigen::Vector3d PtCdProcessing::segPCA(const segment& seg) {
 }
 
 
-void PtCdProcessing::segIdentification(std::vector<segment>& drone_segments){
+void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments){
 
-  for (const segment& seg : drone_segments) {
+  std::vector<segment> new_world_segments = world_segments;
 
-    Eigen::Vector3d test_seg_p1 = seg.t_min * seg.b + seg.a;
-    Eigen::Vector3d test_seg_p2 = seg.t_max * seg.b + seg.a;
+  for (const segment& drone_seg : drone_segments) {
 
     bool add_seg = true;
     
-    Eigen::Vector3d eigenvalues = segPCA(seg);
+    Eigen::Vector3d eigenvalues = segPCA(drone_seg);
     double new_pca_coeff = eigenvalues[0] / (eigenvalues[0] + eigenvalues[1] + eigenvalues[2]);
 
     if (new_pca_coeff < min_pca_coeff) {
@@ -308,7 +322,9 @@ void PtCdProcessing::segIdentification(std::vector<segment>& drone_segments){
       continue;
     }
 
-    double epsilon = 2*opt_dx + 2*seg.radius;
+    double epsilon = 2*opt_dx + 2*drone_seg.radius;
+    Eigen::Vector3d test_seg_p1 = drone_seg.t_min * drone_seg.b + drone_seg.a;
+    Eigen::Vector3d test_seg_p2 = drone_seg.t_max * drone_seg.b + drone_seg.a;
 
     for (size_t i = 0; i < world_segments.size(); ++i) {
       Eigen::Vector3d world_seg_p1 = world_segments[i].t_min * world_segments[i].b + world_segments[i].a;
@@ -319,7 +335,7 @@ void PtCdProcessing::segIdentification(std::vector<segment>& drone_segments){
 
       if (((test_seg_proj_p1-test_seg_p1).norm() < epsilon) && 
           ((test_seg_proj_p2-test_seg_p2).norm() < epsilon) && 
-          (seg.radius == world_segments[i].radius)){
+          (drone_seg.radius == world_segments[i].radius)){
 
         if (verbose_level > NONE){
           ROS_INFO("Segments are close, checking for similarity");
@@ -350,25 +366,43 @@ void PtCdProcessing::segIdentification(std::vector<segment>& drone_segments){
 
           add_seg = false;
 
-          world_segments[i].a = new_world_seg_a;
-          world_segments[i].b = new_world_seg_b;
+          segment modif_seg = world_segments[i];
+
+          modif_seg.a = new_world_seg_a;
+          modif_seg.b = new_world_seg_b;
 
           std::vector<double> list_t = {test_seg_proj_t1, test_seg_proj_t2, world_seg_proj_t1, world_seg_proj_t2};
-          world_segments[i].t_max = *std::max_element(list_t.begin(), list_t.end());
-          world_segments[i].t_min = *std::min_element(list_t.begin(), list_t.end());
-          world_segments[i].radius = seg.radius;
-          world_segments[i].points.insert(world_segments[i].points.end(), seg.points.begin(), seg.points.end());
-          world_segments[i].pca_coeff = (world_segments[i].pca_coeff*world_segments[i].num_pca+new_pca_coeff)/(world_segments[i].num_pca+1);
-          world_segments[i].num_pca += 1;
+          modif_seg.t_max = *std::max_element(list_t.begin(), list_t.end());
+          modif_seg.t_min = *std::min_element(list_t.begin(), list_t.end());
+          modif_seg.radius = drone_seg.radius;
+          modif_seg.points.insert(modif_seg.points.end(), drone_seg.points.begin(), drone_seg.points.end());
+          modif_seg.pca_coeff = (modif_seg.pca_coeff*modif_seg.num_pca+new_pca_coeff)/(modif_seg.num_pca+1);
+          modif_seg.num_pca += 1;
 
-          break;
+          // for (const segment& world_seg : world_segments) {
+          //   Eigen::Vector3d modif_seg_p1 = modif_seg.t_min * modif_seg.b + modif_seg.a;
+          //   Eigen::Vector3d modif_seg_p2 = modif_seg.t_max * modif_seg.b + modif_seg.a;
+          //   Eigen::Vector3d modif_seg_proj_p1 = find_proj(world_seg.a, world_seg.b, modif_seg_p1);
+          //   Eigen::Vector3d modif_seg_proj_p2 = find_proj(new_world_seg_a, new_world_seg_b, modif_seg_p2);
+
+          //   if (!(((test_seg_proj_p1-test_seg_p1).norm() < epsilon) && 
+          //       ((test_seg_proj_p2-test_seg_p2).norm() < epsilon)) && 
+          //       (drone_seg.radius == world_segments[i].radius)){
+
+          //       }
+          // }
+
+          world_segments[i] = modif_seg;
+
+          // break;
         }
       } else if (verbose_level > NONE){
         ROS_INFO("Segments are not close");
       }
     }
+
     if (add_seg) {
-      segment added = seg; 
+      segment added = drone_seg; 
       added.pca_coeff = new_pca_coeff;
       added.num_pca = 1;
       world_segments.push_back(added);
@@ -390,19 +424,19 @@ void PtCdProcessing::structureOutput(){
   }
 
   for (size_t i = 0; i < world_segments.size(); ++i) {
-    const segment& world_seg_1 = world_segments[i];
+    const segment world_seg_1 = world_segments[i];
     bool hasIntersection = false;
 
     for (size_t j = i + 1; j < world_segments.size(); ++j) {
-      const segment& world_seg_2 = world_segments[j];
+      const segment world_seg_2 = world_segments[j];
 
-      double epsilon = 2*opt_dx;
+      double epsilon = 2*opt_dx + world_seg_1.radius + world_seg_2.radius;
 
       Eigen::Vector3d world_seg_1_p1 = world_seg_1.t_min * world_seg_1.b + world_seg_1.a;
       Eigen::Vector3d world_seg_2_p1 = world_seg_2.t_min * world_seg_2.b + world_seg_2.a;
 
       Eigen::Vector3d cross_prod = world_seg_2.b.cross(world_seg_1.b);
-      if (cross_prod.norm() < 1e-6) {
+      if (cross_prod.norm() < 1e-4) {
         if (verbose_level > INFO)
           ROS_WARN("Segments are parallel, skipping intersection check");
         continue;
@@ -415,11 +449,13 @@ void PtCdProcessing::structureOutput(){
 
       Eigen::Vector3d solution = LHS.colPivHouseholderQr().solve(RHS);
       
-      double dist_intersection = abs(solution[2] * cross_prod.norm());
+      double dist_intersection = abs(solution[2]);
 
-
-      if (((solution[0] >= world_seg_1.t_min && solution[0] <= world_seg_1.t_max) &&
-          (solution[1] > world_seg_2.t_min && solution[1] < world_seg_2.t_max)) &&
+      double tolerance_coef = 0.05;
+      double tol_seg_1 = tolerance_coef * (world_seg_1.t_max - world_seg_1.t_min);
+      double tol_seg_2 = tolerance_coef * (world_seg_2.t_max - world_seg_2.t_min);
+      if (((solution[0] >= (world_seg_1.t_min-tol_seg_1) && solution[0] <= (world_seg_1.t_max+tol_seg_1)) &&
+          (solution[1] >= (world_seg_2.t_min-tol_seg_2) && solution[1] <= (world_seg_2.t_max+tol_seg_2))) &&
           dist_intersection < epsilon) {
 
         Eigen::Vector3d intersection_point = world_seg_1_p1 + solution[0] * world_seg_1.b;
@@ -441,8 +477,7 @@ void PtCdProcessing::structureOutput(){
         new_seg_2_part2.t_min = solution[1];
         struct_segm.push_back(new_seg_2_part2);
 
-        intersection_matrix[i][j] = std::make_tuple(solution[0], solution[1]);
-        intersection_matrix[j][i] = std::make_tuple(solution[1], solution[0]);
+        intersection_matrix[i][j] = std::make_tuple(world_seg_1.t_min + solution[0], world_seg_2.t_min + solution[1]);
 
         hasIntersection = true;
       }
@@ -456,16 +491,20 @@ void PtCdProcessing::structureOutput(){
 
 // Publish the points used, and the computed segments as cylinders in RViz
 void PtCdProcessing::visualization() {
+  clearMarkers();
+
   // Create a pointcloud to hold the points used for Hough
   sensor_msgs::PointCloud2 output_hough;
   pcl::PointCloud<pcl::PointXYZ> pc_out;
   // Create a marker array to hold the cylinders
   visualization_msgs::MarkerArray markers;
-    
 
+  int id_counter = 0;
+    
+  std::vector<segment> output_segments = world_segments;
   // Loop through the computed segments and create a cylinder for each segment
-  for (size_t i = 0; i < struct_segm.size(); i++) {
-    for (const Eigen::Vector3d& point : struct_segm[i].points){
+  for (size_t i = 0; i < output_segments.size(); i++) {
+    for (const Eigen::Vector3d& point : output_segments[i].points){
       pcl::PointXYZ p_pcl;
       p_pcl.x = point.x();
       p_pcl.y = point.y();
@@ -480,14 +519,14 @@ void PtCdProcessing::visualization() {
     cylinder.header.frame_id = "mocap";
     cylinder.header.stamp = ros::Time::now();
     cylinder.ns = "cylinders";
-    cylinder.id = i;
+    cylinder.id = id_counter++;
     cylinder.action = visualization_msgs::Marker::ADD;
     cylinder.pose.orientation.w = 1.0;
     cylinder.type = visualization_msgs::Marker::CYLINDER;
 
     // Set the cylinder's position (midpoint between p1 and p2)
-    Eigen::Vector3d segment_p1 = struct_segm[i].t_min * struct_segm[i].b + struct_segm[i].a;
-    Eigen::Vector3d segment_p2 = struct_segm[i].t_max * struct_segm[i].b + struct_segm[i].a;
+    Eigen::Vector3d segment_p1 = output_segments[i].t_min * output_segments[i].b + output_segments[i].a;
+    Eigen::Vector3d segment_p2 = output_segments[i].t_max * output_segments[i].b + output_segments[i].a;
 
     cylinder.pose.position.x = (segment_p1.x() + segment_p2.x()) / 2.0;
     cylinder.pose.position.y = (segment_p1.y() + segment_p2.y()) / 2.0;
@@ -502,39 +541,59 @@ void PtCdProcessing::visualization() {
     cylinder.pose.orientation.y = q.y();
     cylinder.pose.orientation.z = q.z();
     cylinder.pose.orientation.w = q.w();
-
-    // Set the cylinder's scale (height and radius)
     double cylinder_height = (segment_p2 - segment_p1).norm();
-    double cylinder_radius = struct_segm[i].radius;
+    double cylinder_radius = output_segments[i].radius;
     cylinder.scale.x = cylinder_radius * 2.0;
     cylinder.scale.y = cylinder_radius * 2.0;
     cylinder.scale.z = cylinder_height;
-
-    // Set the cylinder's color and transparency
     cylinder.color.r = 1.0;
     cylinder.color.g = 0.0;
     cylinder.color.b = 0.0;
-    cylinder.color.a = 1.0;
+    cylinder.color.a = 0.5;
 
     // Add the cylinder marker to the marker array
     markers.markers.push_back(cylinder);
+
+
+    // Create a text marker for displaying the segment number
+    visualization_msgs::Marker text_marker;
+    text_marker.header.frame_id = "mocap";
+    text_marker.header.stamp = ros::Time::now();
+    text_marker.ns = "segment_text";
+    text_marker.id = id_counter++;
+    text_marker.action = visualization_msgs::Marker::ADD;
+    text_marker.pose.orientation.w = 1.0;
+    text_marker.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
+    text_marker.pose.position.x = (segment_p1.x() + segment_p2.x()) / 2.0;
+    text_marker.pose.position.y = (segment_p1.y() + segment_p2.y()) / 2.0;
+    text_marker.pose.position.z = (segment_p1.z() + segment_p2.z()) / 2.0 + 0.5;
+    text_marker.text = std::to_string(i);
+    text_marker.scale.z = 0.4;
+    text_marker.color.r = 1.0;
+    text_marker.color.g = 1.0;
+    text_marker.color.b = 1.0;
+    text_marker.color.a = 1.0;
+
+    // Add the text marker to the marker array
+    markers.markers.push_back(text_marker);
   }
 
-      // Loop through the intersection matrix to create a sphere for each intersection
-  for (size_t i = 0; i < intersection_matrix.size(); i++) {
-    for (size_t j = i + 1; j < intersection_matrix[i].size(); j++) {
+  for (size_t i = 0; i < world_segments.size(); i++) {
+    for (size_t j = i + 1; j < world_segments.size(); j++) {
       double t1, t2;
       std::tie(t1, t2) = intersection_matrix[i][j];
 
-      // Check if an intersection exists between seg i and j
+
+      // Check if an intersection exists between drone_seg i and j
       if (t1 != -1.0 && t2 != -1.0) {
+          
           Eigen::Vector3d intersection_point = world_segments[i].a + t1 * world_segments[i].b;
 
           visualization_msgs::Marker sphere;
           sphere.header.frame_id = "mocap";
           sphere.header.stamp = ros::Time::now();
           sphere.ns = "intersections";
-          sphere.id = i * intersection_matrix.size() + j;  // Unique ID for each sphere
+          sphere.id = id_counter++;
           sphere.action = visualization_msgs::Marker::ADD;
           sphere.pose.orientation.w = 1.0;
           sphere.type = visualization_msgs::Marker::SPHERE;
@@ -542,7 +601,7 @@ void PtCdProcessing::visualization() {
           sphere.pose.position.y = intersection_point.y();
           sphere.pose.position.z = intersection_point.z();
 
-          double sphere_radius = 3/2*std::max(radius_sizes[0], radius_sizes[radius_sizes.size()-1]);
+          double sphere_radius = 3/2*std::max(radius_sizes.front(), radius_sizes.back());
           sphere.scale.x = sphere_radius * 2.0;
           sphere.scale.y = sphere_radius * 2.0;
           sphere.scale.z = sphere_radius * 2.0;
@@ -552,6 +611,27 @@ void PtCdProcessing::visualization() {
           sphere.color.a = 1.0;
 
           markers.markers.push_back(sphere);
+
+
+          // Text marker for displaying segment numbers
+          visualization_msgs::Marker text_marker;
+          text_marker.header.frame_id = "mocap";
+          text_marker.header.stamp = ros::Time::now();
+          text_marker.ns = "intersection_text";
+          text_marker.id = id_counter++;
+          text_marker.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
+          text_marker.action = visualization_msgs::Marker::ADD;
+          text_marker.pose.position.x = intersection_point.x();
+          text_marker.pose.position.y = intersection_point.y();
+          text_marker.pose.position.z = intersection_point.z() + 0.1;
+          text_marker.scale.z = 0.1;
+          text_marker.color.a = 1.0;
+          text_marker.color.r = 1.0;
+          text_marker.color.g = 1.0;
+          text_marker.color.b = 1.0;
+          text_marker.text = "Intersection: " + std::to_string(i) + " & " + std::to_string(j);
+
+          markers.markers.push_back(text_marker);
       }
     }
   }
@@ -565,4 +645,12 @@ void PtCdProcessing::visualization() {
 
   // Publish the marker array containing the cylinders
   marker_pub.publish(markers);
+}
+
+void PtCdProcessing::clearMarkers() {
+  visualization_msgs::Marker clear_marker;
+  clear_marker.action = visualization_msgs::Marker::DELETEALL;
+  visualization_msgs::MarkerArray marker_array;
+  marker_array.markers.push_back(clear_marker);
+  marker_pub.publish(marker_array);
 }
