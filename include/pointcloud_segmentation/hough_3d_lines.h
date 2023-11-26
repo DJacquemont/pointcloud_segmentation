@@ -220,17 +220,20 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<segment>& compu
     bool seg_integrity = true;
     int div_number = std::max(3, static_cast<int>(std::floor(t_values.size() / opt_minvotes)));
     double div_length = (t_values.back() - t_values.front()) / div_number;
+    int div_minpoints = static_cast<int>(std::ceil((3.0/4.0) * t_values.size() / div_number));
 
     for (int i = 0; i < div_number; i++) {
       double start_range = t_values.front() + i * div_length;
-      double end_range = start_range + div_length;
+      double end_range = (i == div_number - 1) ? t_values.back() : start_range + div_length;
       int count = 0;
+      
       for (const double& t : t_values) {
         if (t >= start_range && t <= end_range) {
           ++count;
         }
       }
-      if (count < std::ceil((opt_minvotes+t_values.size())/(2*div_number))) {
+
+      if (count < div_minpoints) {
         seg_integrity = false;
         break;
       }

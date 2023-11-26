@@ -16,15 +16,15 @@
         <param name="max_altitude"      value="2.5" />
         <param name="hovering_height"   value="1.5" />
         <param name="max_displacement"  value="2.0" />
-        <param name="velocity"          value="1.0" />
+        <param name="velocity"          value="0.1" />
         <param name="fixed_heading"     value="false" />
 
         <!-- Waypoint trajectories parameters -->
         <param name="plot"              value="false" />
         <param name="waypoints_file"    value="$(find pointcloud_segmentation)/config_auto_pilot/$(arg waypoints_file)" />
         <param name="no_interpolation"  value="false" />
-        <param name="waypoint_velocity" value="0.5" />
-        <param name="mean_velocity"     value="1.0" />
+        <param name="waypoint_velocity" value="0.1" />
+        <param name="mean_velocity"     value="0.1" />
         <param name="loop"              value="true" />
         <param name="velocity_control"  value="true" />
 
