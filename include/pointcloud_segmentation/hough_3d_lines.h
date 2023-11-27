@@ -16,6 +16,7 @@ struct segment {
   // Eigen::Vector3d p1, p2;
   Eigen::Vector3d a, b;
   double t_min, t_max;
+  std::vector<double> t_values;
   double radius;
   std::vector<Eigen::Vector3d> points;
   double pca_coeff;
@@ -216,31 +217,8 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<segment>& compu
     }
     
 
-    // check integrity of the segment
-    bool seg_integrity = true;
-    int div_number = std::max(3, static_cast<int>(std::floor(t_values.size() / opt_minvotes)));
-    double div_length = (t_values.back() - t_values.front()) / div_number;
-    int div_minpoints = static_cast<int>(std::ceil((3.0/4.0) * t_values.size() / div_number));
-
-    for (int i = 0; i < div_number; i++) {
-      double start_range = t_values.front() + i * div_length;
-      double end_range = (i == div_number - 1) ? t_values.back() : start_range + div_length;
-      int count = 0;
-      
-      for (const double& t : t_values) {
-        if (t >= start_range && t <= end_range) {
-          ++count;
-        }
-      }
-
-      if (count < div_minpoints) {
-        seg_integrity = false;
-        break;
-      }
-    }
-
     // add line to vector
-    if (min_radius_diff < opt_dx && seg_integrity){
+    if (min_radius_diff < opt_dx){
 
       Eigen::Vector3d p1 = a_eigen + t_values.front() *b_eigen;
       Eigen::Vector3d p2 = a_eigen + t_values.back() *b_eigen;
@@ -250,8 +228,11 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<segment>& compu
       l.b = b_eigen;
       l.t_min = t_values.front();
       l.t_max = t_values.back();
+      l.t_values = t_values;
       l.radius = closest_radius;      
       l.points = points;
+      l.pca_coeff = 0;
+      l.num_pca = 0;
 
       computed_lines.push_back(l);
     }

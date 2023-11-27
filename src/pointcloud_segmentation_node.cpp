@@ -50,7 +50,8 @@ public:
         }
     }
 
-    leaf_size = std::min(radius_sizes[0], radius_sizes[radius_sizes.size()-1]);
+    rad_2_leaf_ratio = 3/2;
+    leaf_size = std::min(radius_sizes[0], radius_sizes[radius_sizes.size()-1])/rad_2_leaf_ratio;
     opt_dx = sqrt(3)*leaf_size;
 
     outputConfig();
@@ -79,6 +80,9 @@ public:
 
   // Check if the point cloud is linear
   Eigen::Vector3d segPCA(const segment&);
+
+  // Check the integrity of the segment
+  bool integrityCheck(const segment& drone_seg);
 
   // Identify intersections between segments
   void segFiltering(std::vector<segment>& drone_segments);
@@ -124,6 +128,7 @@ private:
   std::vector<double> radius_sizes;
   double leaf_size;
   double opt_dx;
+  double rad_2_leaf_ratio;
 };
 
 //--------------------------------------------------------------------
@@ -277,7 +282,11 @@ void PtCdProcessing::drone2WorldSeg(std::vector<segment>& drone_segments){
 
     if (test_seg_p1.z() > floor_trim_height || test_seg_p2.z() > floor_trim_height){
 
+      test_seg.t_values = drone_seg.t_values;
       test_seg.radius = drone_seg.radius;
+      test_seg.pca_coeff = drone_seg.pca_coeff;
+      test_seg.num_pca = drone_seg.num_pca;
+
       for (const Eigen::Vector3d& point : drone_seg.points){
         test_seg.points.push_back(rotation_matrix * point + drone.position);
       }
@@ -309,6 +318,34 @@ Eigen::Vector3d PtCdProcessing::segPCA(const segment& drone_seg) {
 }
 
 
+bool PtCdProcessing::integrityCheck(const segment& drone_seg){
+
+  // check integrity of the segment
+  bool seg_integrity = true;
+  int div_number = static_cast<int>(std::floor(3*drone_seg.t_values.size() / opt_minvotes));
+  double div_length = (drone_seg.t_values.back() - drone_seg.t_values.front()) / div_number;
+  int div_minpoints = static_cast<int>(std::floor((4.0/6.0) * drone_seg.t_values.size() / div_number));
+
+  for (int i = 0; i < div_number; i++) {
+    double start_range = drone_seg.t_values.front() + i * div_length;
+    double end_range = (i == div_number - 1) ? drone_seg.t_values.back() : start_range + div_length;
+    int count = 0;
+    
+    for (const double& t : drone_seg.t_values) {
+      if (t >= start_range && t <= end_range) {
+        ++count;
+      }
+    }
+
+    if (count < div_minpoints) {
+      return false;
+    }
+  }
+  return true;
+}
+
+
+
 void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments){
 
   std::vector<segment> new_world_segments = world_segments;
@@ -324,16 +361,24 @@ void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments){
     double new_pca_coeff = eigenvalues[0] / (eigenvalues[0] + eigenvalues[1] + eigenvalues[2]);
 
     double length_seg = (test_seg_p2 - test_seg_p1).norm();
-    int min_nb_points_seg = 2*drone_seg.radius*length_seg/(2*opt_dx*2*opt_dx);
+    int min_nb_points_seg = static_cast<int>(2.0*drone_seg.radius*length_seg/(rad_2_leaf_ratio*2*opt_dx*2*opt_dx));
 
-    if (new_pca_coeff < min_pca_coeff || drone_seg.points.size() < min_nb_points_seg) {
+    bool integrity = integrityCheck(drone_seg);
+
+    // std::cout << "-----------------------------------" << std::endl;
+    // std::cout << "integrity: " << integrity << std::endl;
+    // std::cout << "new_pca_coeff: " << new_pca_coeff << std::endl;
+    // std::cout << "min_nb_points_seg: " << min_nb_points_seg << std::endl;
+    // std::cout << "drone_seg.points.size(): " << drone_seg.points.size() << std::endl;
+
+
+    if (new_pca_coeff < min_pca_coeff || drone_seg.points.size() < min_nb_points_seg || !integrity) {
       add_seg = false;
       continue;
     }
 
     double epsilon = 2*opt_dx + 2*drone_seg.radius;
     
-
     for (size_t i = 0; i < world_segments.size(); ++i) {
       Eigen::Vector3d world_seg_p1 = world_segments[i].t_min * world_segments[i].b + world_segments[i].a;
       Eigen::Vector3d world_seg_p2 = world_segments[i].t_max * world_segments[i].b + world_segments[i].a;
@@ -395,6 +440,16 @@ void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments){
     }
 
     if (add_seg) {
+
+      std::cout << "-----------------------------------" << std::endl;
+      std::cout << "segment number " << world_segments.size() << " added" << std::endl;
+      std::cout << "integrity: " << integrity << std::endl;
+      std::cout << "new_pca_coeff: " << new_pca_coeff << std::endl;
+      std::cout << "min_nb_points_seg: " << min_nb_points_seg << std::endl;
+      std::cout << "drone_seg.points.size(): " << drone_seg.points.size() << std::endl;
+
+      integrityCheck(drone_seg);
+
       segment added = drone_seg; 
       added.pca_coeff = new_pca_coeff;
       added.num_pca = 1;

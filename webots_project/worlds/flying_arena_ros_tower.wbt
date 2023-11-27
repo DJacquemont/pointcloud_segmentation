@@ -50,7 +50,7 @@ DEF CEILING Solid {
   ]
 }
 starling {
-  translation 0.5 3 0.08
+  translation 0.5 2.5 0.08
   rotation -1.391033679971971e-16 -5.8324526587381756e-18 1 -1.57
   controller "<extern>"
 }
