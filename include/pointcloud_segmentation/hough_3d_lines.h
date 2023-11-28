@@ -10,10 +10,11 @@
 
 using Eigen::MatrixXf;
 
-const int opt_nlines = 5;
-
+/**
+ * @brief Segment structure storing the line segment information
+ * 
+ */
 struct segment {
-  // Eigen::Vector3d p1, p2;
   Eigen::Vector3d a, b;
   double t_min, t_max;
   std::vector<double> t_values;
@@ -23,6 +24,14 @@ struct segment {
   int num_pca;
 };
 
+/**
+ * @brief Finds the projection of a point on a line
+ * 
+ * @param a anchor point of the line
+ * @param b direction of the line
+ * @param p point to project
+ * @return Eigen::Vector3d projection of p on the line
+ */
 int find_t(Eigen::Vector3d a, Eigen::Vector3d b, Eigen::Vector3d p, std::vector<double>& t_values, std::vector<double>& p_norm){
 
   if (b.x() == 0) {
@@ -52,6 +61,14 @@ int find_t(Eigen::Vector3d a, Eigen::Vector3d b, Eigen::Vector3d p, std::vector<
   return 0;
 }
 
+/**
+ * @brief Finds the projection of a point on a line
+ * 
+ * @param a anchor point of the line
+ * @param b direction of the line
+ * @param p point to project
+ * @return Eigen::Vector3d projection of p on the line
+ */
 Eigen::Vector3d find_proj(Eigen::Vector3d a, Eigen::Vector3d b, Eigen::Vector3d p){
 
   Eigen::Vector3d p_A(a);
@@ -61,7 +78,15 @@ Eigen::Vector3d find_proj(Eigen::Vector3d a, Eigen::Vector3d b, Eigen::Vector3d 
   return p_proj;
 }
 
-// orthogonal least squares fit with libeigen
+
+/**
+ * @brief orthogonal least squares fit with libeigen
+ * 
+ * @param pc point cloud
+ * @param a anchor point of the line
+ * @param b direction of the line
+ * @return double largest eigenvalue of the scatter matrix
+ */
 double orthogonal_LSQ(const PointCloud &pc, Vector3d* a, Vector3d* b){
   // rc = largest eigenvalue
   double rc = 0.0;
@@ -93,7 +118,20 @@ double orthogonal_LSQ(const PointCloud &pc, Vector3d* a, Vector3d* b){
   return (rc);
 }
 
-// Method computing 3d lines with the Hough transform
+
+
+/**
+ * @brief Method computing 3d lines with the Hough transform
+ * 
+ * @param pc point cloud
+ * @param computed_lines vector of segments
+ * @param opt_dx discretization step
+ * @param radius_sizes vector of radius sizes
+ * @param opt_minvotes minimum number of votes for a line to be considered
+ * @param opt_nlines maximum number of lines to be computed
+ * @param VERBOSE verbosity level
+ * @return int 0 if successful, 1 otherwise
+ */
 int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<segment>& computed_lines, 
                   double opt_dx, std::vector<double> radius_sizes, int opt_minvotes, int opt_nlines, int VERBOSE){
 
@@ -115,9 +153,6 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<segment>& compu
       X.points.push_back(point);
     }
   }
-
-  
-
 
   // number of icosahedron subdivisions for direction discretization
   const int granularity = 4;
@@ -142,7 +177,6 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<segment>& compu
     ROS_WARN("dx too large");
     return 1;
   }
-
 
   double num_x = floor(d / opt_dx + 0.5);
   double num_cells = num_x * num_x * num_directions[granularity];

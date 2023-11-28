@@ -12,8 +12,9 @@
 #include <tf2_ros/transform_listener.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <geometry_msgs/TransformStamped.h>
-#include <eigen3/Eigen/Dense>
 #include <mutex>
+#include <thread>
+#include <condition_variable>
 #include <chrono>
 
 #include "hough_3d_lines.h"
@@ -22,41 +23,36 @@ using namespace std::chrono;
 
 enum verbose {NONE, INFO, WARN};
 
-// structure storing the drone's pose with a timestamp
+/**
+ * @brief Stucture storing the pose of the drone
+ * 
+ */
 struct pose {
     Eigen::Vector3d position;
     Eigen::Quaterniond orientation;
 };
 
 
-//--------------------------------------------------------------------
-// Class in charge of the node's communication (Subscription & Publication)
+/**
+ * @brief Class processing the points and storing the output segments
+ * 
+ * @details This class subscribes to the point cloud topic published by the Autopilot package, 
+ * and processes the point cloud using the Hough transform.
+ */
 class PtCdProcessing
 {
+  struct SharedData {
+    sensor_msgs::PointCloud2 latestMsg;
+    bool newDataAvailable = false;
+  };
+
 public:
   PtCdProcessing() : tfListener(tfBuffer)
   {
-    // Get parameters from the parameter server
-    int verbose_level_int;
-    node.getParam("/verbose_level", verbose_level_int);
-    verbose_level = static_cast<verbose>(verbose_level_int);
-    node.getParam("/floor_trim_height", floor_trim_height);
-    node.getParam("/min_pca_coeff", min_pca_coeff);
-    node.getParam("/opt_minvotes", opt_minvotes);
-    node.getParam("/opt_nlines", opt_nlines);
-    XmlRpc::XmlRpcValue radius_sizes_tmp;
-    if (node.getParam("/radius_sizes", radius_sizes_tmp)) {
-        radius_sizes.clear();
-        for (int32_t i = 0; i < radius_sizes_tmp.size(); ++i) {
-            radius_sizes.push_back(static_cast<double>(radius_sizes_tmp[i]));
-        }
-    }
+    running = true;
+    processingThread = std::thread(&PtCdProcessing::processData, this);
 
-    rad_2_leaf_ratio = 3.0 / 2.0;
-    leaf_size = std::min(radius_sizes[0], radius_sizes[radius_sizes.size()-1])/rad_2_leaf_ratio;
-    opt_dx = sqrt(3)*leaf_size;
-
-    outputConfig();
+    setParams();
 
     // Initialize subscribers and publishers
     tof_pc_sub = node.subscribe("/tof_pc", 1, &PtCdProcessing::pointcloudCallback, this);
@@ -65,46 +61,49 @@ public:
     hough_pc_pub = node.advertise<sensor_msgs::PointCloud2>("hough_pointcloud", 0);
   }
 
-  // Callback function receiving & processing ToF images from the Autopilot package
+  ~PtCdProcessing() {
+    running = false;
+    dataCondition.notify_one();
+    if (processingThread.joinable()) {
+        processingThread.join();
+    }
+  }
+
+  void setParams();
+
   void pointcloudCallback(const sensor_msgs::PointCloud2::ConstPtr &msg);
 
-  // Output the configuration
-  void outputConfig();
+  void processData();
 
-  // Find the closest pose in time to the point cloud's timestamp
   int closestDronePose(const ros::Time& timestamp);
 
-  // Filtering pointcloud
   void cloudFiltering(pcl::PCLPointCloud2::Ptr& cloud, pcl::PointCloud<pcl::PointXYZ>::Ptr& filtered_cloud_XYZ);
 
-  // Transform the segments from the drone's frame to the world frame
   void drone2WorldSeg(std::vector<segment>& drone_segments);
 
-  // Check if the point cloud is linear
   Eigen::Vector3d segPCA(const segment&);
 
-  // Check the integrity of the segment
   bool integrityCheck(const segment& drone_seg);
 
-  // Identify intersections between segments
   void segFiltering(std::vector<segment>& drone_segments);
 
-  // Output the structure
   void intersectionSearch();
 
-  // Publish the points used, and the computed segments as cylinders in RViz
   void visualization();
 
-  // Clear the markers in RViz
   void clearMarkers();
 
-  // Output the structure
   void outputSegment();
 
 private:
   ros::NodeHandle node;
 
-  std::mutex mutex;
+  // Mutex and condition variable for thread safety
+  bool running = false;
+  SharedData sharedData;
+  std::mutex dataMutex;
+  std::condition_variable dataCondition;
+  std::thread processingThread;
 
   // Subscribers and publishers
   ros::Subscriber tof_pc_sub;
@@ -128,87 +127,130 @@ private:
   double min_pca_coeff;
   int opt_minvotes;
   int opt_nlines;
-  // const int opt_minvotes = 1/2*(2*std::max(radius_sizes[0], radius_sizes[radius_sizes.size()-1]) * (1+RADIUS_2_LENGTH_RATIO))/(leaf_size*leaf_size);
   std::vector<double> radius_sizes;
   double leaf_size;
   double opt_dx;
   double rad_2_leaf_ratio;
 };
 
-//--------------------------------------------------------------------
-// Callback function
-//--------------------------------------------------------------------
 
-
-// Callback function receiving & processing ToF images from the Autopilot packag
+/**
+ * @brief Callback function receiving & processing ToF images from the Autopilot package
+ * 
+ * @param msg Message containing the point cloud
+ * @return ** void 
+ */
 void PtCdProcessing::pointcloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg)
 {
-  std::lock_guard<std::mutex> lock(mutex);
-  
-  auto callStart = high_resolution_clock::now();
-
-  // Find the closest pose in time to the point cloud's timestamp
-  if (closestDronePose(msg->header.stamp)){
-    return;
-  }
-
-  // Filtering pointcloud
-  pcl::PCLPointCloud2::Ptr cloud (new pcl::PCLPointCloud2);
-  pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_cloud_XYZ( new pcl::PointCloud<pcl::PointXYZ> );
-  pcl_conversions::toPCL(*msg, *cloud);
-  cloudFiltering(cloud, filtered_cloud_XYZ);
-
-  // segment extraction with the Hough transform
-  std::vector<segment> drone_segments;
-  // const double opt_dx = sqrt(3)*leaf_size; // optimal discretization step
-  if (hough3dlines(*filtered_cloud_XYZ, drone_segments, opt_dx, radius_sizes, opt_minvotes, opt_nlines, verbose_level) && verbose_level > INFO){
-    ROS_WARN("Unable to perform the Hough transform");
-  }
-
-  // Transform the segments from the drone's frame to the world frame
-  drone2WorldSeg(drone_segments);
-
-  // Filter the segments that already exist in the world_segments
-  segFiltering(drone_segments);
-
-  // Identify intersections between segments, and ready the data for output
-  intersectionSearch();
-
-  // Output the structure
-  if (verbose_level > INFO){
-    outputSegment();
-  }
-
-  visualization();
-
-  auto callEnd = high_resolution_clock::now();
-  if (verbose_level > NONE){
-    ROS_INFO("Callback execution time: %ld us",
-              duration_cast<microseconds>(callEnd - callStart).count());
-  }
+  std::lock_guard<std::mutex> lock(dataMutex);
+  sharedData.latestMsg = *msg; // Assuming copy assignment is available
+  sharedData.newDataAvailable = true;
+  dataCondition.notify_one();
 }
 
 
-//--------------------------------------------------------------------
-// Utility functions
-//--------------------------------------------------------------------
+/**
+ * @brief Set the parameters
+ * 
+ * @return ** void
+ */
+void PtCdProcessing::setParams(){
+  // Get parameters from the parameter server
+  int verbose_level_int;
+  this->node.getParam("/verbose_level", verbose_level_int);
+  verbose_level = static_cast<verbose>(verbose_level_int);
+  this->node.getParam("/floor_trim_height", floor_trim_height);
+  this->node.getParam("/min_pca_coeff", min_pca_coeff);
+  this->node.getParam("/opt_minvotes", opt_minvotes);
+  this->node.getParam("/opt_nlines", opt_nlines);
+  XmlRpc::XmlRpcValue radius_sizes_tmp;
+  if (this->node.getParam("/radius_sizes", radius_sizes_tmp)) {
+      radius_sizes.clear();
+      for (int32_t i = 0; i < radius_sizes_tmp.size(); ++i) {
+          radius_sizes.push_back(static_cast<double>(radius_sizes_tmp[i]));
+      }
+  }
 
+  rad_2_leaf_ratio = 3.0 / 2.0;
+  leaf_size = std::min(radius_sizes[0], radius_sizes[radius_sizes.size()-1])/rad_2_leaf_ratio;
+  opt_dx = sqrt(3)*leaf_size;
 
-// Output the configuration
-void PtCdProcessing::outputConfig() {
   ROS_INFO("Configuration:");
   ROS_INFO("  verbose_level: %d", verbose_level);
   ROS_INFO("  floor_trim_height: %f", floor_trim_height);
   ROS_INFO("  min_pca_coeff: %f", min_pca_coeff);
   ROS_INFO("  opt_minvotes: %d", opt_minvotes);
   ROS_INFO("  opt_nlines: %d", opt_nlines);
-  ROS_INFO("  radius_sizes: %f, %f, %f, %f, %f, %f, %f", radius_sizes[0], radius_sizes[1], radius_sizes[2], radius_sizes[3], radius_sizes[4], radius_sizes[5], radius_sizes[6]);
+  ROS_INFO("  radius_sizes: %f, %f, %f, %f, %f, %f, %f", radius_sizes[0], radius_sizes[1], radius_sizes[2], 
+                                        radius_sizes[3], radius_sizes[4], radius_sizes[5], radius_sizes[6]);
   ROS_INFO("  leaf_size: %f", leaf_size);
   ROS_INFO("  opt_dx: %f", opt_dx);
 }
 
 
-// Find the closest pose in time to the point cloud's timestamp
+/**
+ * @brief Process the latest point cloud
+ * 
+ * @return ** void
+ */
+void PtCdProcessing::processData() {
+  while (running) {
+    std::unique_lock<std::mutex> lock(dataMutex);
+    dataCondition.wait(lock, [this] { return sharedData.newDataAvailable; });
+
+    // Process the latest message
+    auto latestMsgCopy = sharedData.latestMsg;
+    sharedData.newDataAvailable = false;
+
+    lock.unlock();
+
+    auto callStart = high_resolution_clock::now();
+
+    // Find the closest pose in time to the point cloud's timestamp
+    if (closestDronePose(latestMsgCopy.header.stamp)){
+      return;
+    }
+
+    // Filtering pointcloud
+    pcl::PCLPointCloud2::Ptr cloud (new pcl::PCLPointCloud2);
+    pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_cloud_XYZ( new pcl::PointCloud<pcl::PointXYZ> );
+    pcl_conversions::toPCL(latestMsgCopy, *cloud);
+    cloudFiltering(cloud, filtered_cloud_XYZ);
+
+    // segment extraction with the Hough transform
+    std::vector<segment> drone_segments;
+    // const double opt_dx = sqrt(3)*leaf_size; // optimal discretization step
+    if (hough3dlines(*filtered_cloud_XYZ, drone_segments, opt_dx, radius_sizes, opt_minvotes, opt_nlines, verbose_level) 
+        && verbose_level > INFO){
+      ROS_WARN("Unable to perform the Hough transform");
+    }
+
+    // Transform the segments from the drone's frame to the world frame
+    drone2WorldSeg(drone_segments);
+
+    // Filter the segments that already exist in the world_segments
+    segFiltering(drone_segments);
+
+    // Identify intersections between segments, and ready the data for output
+    intersectionSearch();
+
+    visualization();
+
+    auto callEnd = high_resolution_clock::now();
+    if (verbose_level > NONE){
+      ROS_INFO("Callback execution time: %ld us",
+                duration_cast<microseconds>(callEnd - callStart).count());
+    }
+  }
+}
+
+
+/**
+ * @brief Finds the closest pose in time to the point cloud's timestamp
+ * 
+ * @param timestamp Timestamp of the point cloud
+ * @return int 0 if successful, 1 otherwise
+ */
 int PtCdProcessing::closestDronePose(const ros::Time& timestamp) {
   try {
     geometry_msgs::TransformStamped transformStamped;
@@ -232,7 +274,14 @@ int PtCdProcessing::closestDronePose(const ros::Time& timestamp) {
 
 
 // Filtering pointcloud
-void PtCdProcessing::cloudFiltering(pcl::PCLPointCloud2::Ptr& cloud, pcl::PointCloud<pcl::PointXYZ>::Ptr& filtered_cloud_XYZ){
+/**
+ * @brief Filtering pointcloud using PCL thresholding and voxel grid
+ * 
+ * @param cloud cloud to be filtered
+ * @param filtered_cloud_XYZ filtered cloud
+ */
+void PtCdProcessing::cloudFiltering(pcl::PCLPointCloud2::Ptr& cloud, 
+                                    pcl::PointCloud<pcl::PointXYZ>::Ptr& filtered_cloud_XYZ){
   pcl::PCLPointCloud2::Ptr filtered_cloud (new pcl::PCLPointCloud2);
 
   pcl::PassThrough<pcl::PCLPointCloud2> pass;
@@ -265,7 +314,11 @@ void PtCdProcessing::cloudFiltering(pcl::PCLPointCloud2::Ptr& cloud, pcl::PointC
 }
 
 
-// Transform the segments from the drone's frame to the world frame
+/**
+ * @brief Transform the segments from the drone's frame to the world frame
+ * 
+ * @param drone_segments segments in the drone's frame 
+ */
 void PtCdProcessing::drone2WorldSeg(std::vector<segment>& drone_segments){
 
   // Convert the quaternion to a rotation matrix
@@ -305,6 +358,12 @@ void PtCdProcessing::drone2WorldSeg(std::vector<segment>& drone_segments){
 }
 
 
+/**
+ * @brief Computing the PCA of the segment's points
+ * 
+ * @param drone_seg segment in the drone's frame
+ * @return Eigen::Vector3d Eigenvalues
+ */
 Eigen::Vector3d PtCdProcessing::segPCA(const segment& drone_seg) {
 
   // Extract points from drone_seg and create a PCL point cloud
@@ -324,6 +383,13 @@ Eigen::Vector3d PtCdProcessing::segPCA(const segment& drone_seg) {
 }
 
 
+/**
+ * @brief Check the integrity of the segment
+ * 
+ * @param drone_seg segment in the drone's frame
+ * @return true if the segment is valid
+ * @return false if the segment is invalid
+ */
 bool PtCdProcessing::integrityCheck(const segment& drone_seg){
 
   // check integrity of the segment
@@ -355,7 +421,12 @@ bool PtCdProcessing::integrityCheck(const segment& drone_seg){
 }
 
 
-
+/**
+ * @brief Function filtering already existing or invalid segments, fusing similar segments, 
+ * and adding new segments to the world_segments
+ * 
+ * @param drone_segments Segments in the drone's frame
+ */
 void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments){
 
   std::vector<segment> new_world_segments = world_segments;
@@ -374,13 +445,6 @@ void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments){
     int min_nb_points_seg = static_cast<int>(2.0*drone_seg.radius*length_seg/(rad_2_leaf_ratio*2*opt_dx*2*opt_dx));
 
     bool integrity = integrityCheck(drone_seg);
-
-    // std::cout << "-----------------------------------" << std::endl;
-    // std::cout << "integrity: " << integrity << std::endl;
-    // std::cout << "new_pca_coeff: " << new_pca_coeff << std::endl;
-    // std::cout << "min_nb_points_seg: " << min_nb_points_seg << std::endl;
-    // std::cout << "drone_seg.points.size(): " << drone_seg.points.size() << std::endl;
-
 
     if (new_pca_coeff < min_pca_coeff || drone_seg.points.size() < min_nb_points_seg || !integrity) {
       // if (new_pca_coeff < min_pca_coeff || drone_seg.points.size() < min_nb_points_seg) {
@@ -406,7 +470,8 @@ void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments){
         }
 
         // double learning_rate = new_pca_coeff/(world_segments[i].pca_coeff*world_segments[i].num_pca+new_pca_coeff);
-        double learning_rate = (new_pca_coeff*drone_seg.points.size())/(world_segments[i].pca_coeff*world_segments[i].points.size()+new_pca_coeff*drone_seg.points.size());
+        double learning_rate = (new_pca_coeff*drone_seg.points.size())/
+                    (world_segments[i].pca_coeff*world_segments[i].points.size()+new_pca_coeff*drone_seg.points.size());
 
         Eigen::Vector3d new_world_seg_a = test_seg_proj_p1 + learning_rate*(test_seg_p1 - test_seg_proj_p1);
         Eigen::Vector3d new_world_seg_b = (test_seg_proj_p2-test_seg_proj_p1) +
@@ -442,7 +507,8 @@ void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments){
           modif_seg.radius = drone_seg.radius;
           modif_seg.points.insert(modif_seg.points.end(), drone_seg.points.begin(), drone_seg.points.end());
           // modif_seg.pca_coeff = (modif_seg.pca_coeff*modif_seg.num_pca+new_pca_coeff)/(modif_seg.num_pca+1);
-          modif_seg.pca_coeff = (modif_seg.pca_coeff*world_segments[i].points.size()+new_pca_coeff*drone_seg.points.size())/modif_seg.points.size();
+          modif_seg.pca_coeff = (modif_seg.pca_coeff*world_segments[i].points.size()+
+                                                        new_pca_coeff*drone_seg.points.size())/modif_seg.points.size();
           
           modif_seg.num_pca += 1;
 
@@ -455,13 +521,6 @@ void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments){
 
     if (add_seg) {
 
-      std::cout << "-----------------------------------" << std::endl;
-      std::cout << "segment number " << world_segments.size() << " added" << std::endl;
-      // std::cout << "integrity: " << integrity << std::endl;
-      std::cout << "new_pca_coeff: " << new_pca_coeff << std::endl;
-      std::cout << "min_nb_points_seg: " << min_nb_points_seg << std::endl;
-      std::cout << "drone_seg.points.size(): " << drone_seg.points.size() << std::endl;
-
       integrityCheck(drone_seg);
 
       segment added = drone_seg; 
@@ -472,6 +531,13 @@ void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments){
   }
 }
 
+
+/**
+ * @brief Search for intersections between segments, separates segments with intersections, and ready the data for 
+ * output
+ * 
+ * @return ** void
+ */
 void PtCdProcessing::intersectionSearch(){
 
   // initiate variables
@@ -552,7 +618,11 @@ void PtCdProcessing::intersectionSearch(){
 }
 
 
-// Publish the points used, and the computed segments as cylinders in RViz
+/**
+ * @brief Publish the points used, and the computed segments as cylinders in RViz
+ * 
+ * @return ** void
+ */
 void PtCdProcessing::visualization() {
 
   clearMarkers();
@@ -721,34 +791,7 @@ void PtCdProcessing::clearMarkers() {
   marker_pub.publish(marker_array);
 }
 
-// Output the structure
-void PtCdProcessing::outputSegment() {
-  for (size_t i = 0; i < struct_segm.size(); ++i) {
-    std::cout << "Segment number: " << i << std::endl;
-    std::cout << "  a: " << struct_segm[i].a.transpose() << std::endl;
-    std::cout << "  b: " << struct_segm[i].b.transpose() << std::endl;
-    std::cout << "  t_min: " << struct_segm[i].t_min << std::endl;
-    std::cout << "  t_max: " << struct_segm[i].t_max << std::endl;
-    std::cout << "  radius: " << struct_segm[i].radius << std::endl;
-    std::cout << "  pca_coeff: " << struct_segm[i].pca_coeff << std::endl;
-    std::cout << "  num_pca: " << struct_segm[i].num_pca << std::endl;
 
-    std::cout << "  intersections: " << std::endl;
-    for (size_t j = 0; j < intersection_matrix[i].size(); ++j) {
-      double t1, t2;
-      std::tie(t1, t2) = intersection_matrix[i][j];
-      if (t1 != -1.0 && t2 != -1.0) {
-        std::cout << "    " << j << ": " << t1 << ", " << t2 << std::endl;
-      }
-    }
-  }
-}
-
-
-
-//--------------------------------------------------------------------
-// Main function
-//--------------------------------------------------------------------
 
 int main(int argc, char *argv[])
 {

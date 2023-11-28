@@ -1,4 +1,4 @@
-# vebose_level: NONE, INFO, DEBUG
+# vebose_level: NONE - 0, INFO - 1, DEBUG - 2
 verbose_level: 0
 
 # floor_trim_height: cut off the pointcloud below this height
