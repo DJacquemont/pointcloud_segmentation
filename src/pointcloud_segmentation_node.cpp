@@ -13,8 +13,10 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <geometry_msgs/TransformStamped.h>
 #include <eigen3/Eigen/Dense>
-#include "hough_3d_lines.h"
+#include <mutex>
 #include <chrono>
+
+#include "hough_3d_lines.h"
 
 using namespace std::chrono;
 
@@ -50,7 +52,7 @@ public:
         }
     }
 
-    rad_2_leaf_ratio = 3/2;
+    rad_2_leaf_ratio = 3.0 / 2.0;
     leaf_size = std::min(radius_sizes[0], radius_sizes[radius_sizes.size()-1])/rad_2_leaf_ratio;
     opt_dx = sqrt(3)*leaf_size;
 
@@ -102,6 +104,8 @@ public:
 private:
   ros::NodeHandle node;
 
+  std::mutex mutex;
+
   // Subscribers and publishers
   ros::Subscriber tof_pc_sub;
   ros::Publisher marker_pub;
@@ -139,6 +143,8 @@ private:
 // Callback function receiving & processing ToF images from the Autopilot packag
 void PtCdProcessing::pointcloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg)
 {
+  std::lock_guard<std::mutex> lock(mutex);
+  
   auto callStart = high_resolution_clock::now();
 
   // Find the closest pose in time to the point cloud's timestamp
@@ -232,17 +238,17 @@ void PtCdProcessing::cloudFiltering(pcl::PCLPointCloud2::Ptr& cloud, pcl::PointC
   pcl::PassThrough<pcl::PCLPointCloud2> pass;
   pass.setInputCloud(cloud);
   pass.setFilterFieldName("x");
-  pass.setFilterLimits(-2.0f, 2.0f);
+  pass.setFilterLimits(0.0f, 1.5f);
   pass.filter(*filtered_cloud);
 
   pass.setInputCloud(filtered_cloud);
   pass.setFilterFieldName("y");
-  pass.setFilterLimits(-2.0f, 2.0f);
+  pass.setFilterLimits(-1.5f, 1.5f);
   pass.filter(*filtered_cloud);
 
   pass.setInputCloud(filtered_cloud);
   pass.setFilterFieldName("z");
-  pass.setFilterLimits(floor_trim_height-drone.position.z(), 2.0f);
+  pass.setFilterLimits(-1.5f, 1.5f);
   pass.filter(*filtered_cloud);
 
   pcl::VoxelGrid<pcl::PCLPointCloud2> voxel_grid;
@@ -322,13 +328,17 @@ bool PtCdProcessing::integrityCheck(const segment& drone_seg){
 
   // check integrity of the segment
   bool seg_integrity = true;
-  int div_number = static_cast<int>(std::floor(3*drone_seg.t_values.size() / opt_minvotes));
-  double div_length = (drone_seg.t_values.back() - drone_seg.t_values.front()) / div_number;
+
+  Eigen::Vector3d drone_seg_p1 = drone_seg.t_min * drone_seg.b + drone_seg.a;
+  Eigen::Vector3d drone_seg_p2 = drone_seg.t_max * drone_seg.b + drone_seg.a;
+  int div_number = static_cast<int>(std::max(3.0, (drone_seg_p2-drone_seg_p1).norm()) / (opt_dx*opt_minvotes));
+  // int div_number = static_cast<int>(std::floor(3*drone_seg.t_values.size() / opt_minvotes));
+  double div_length_t = (drone_seg.t_values.back() - drone_seg.t_values.front()) / div_number;
   int div_minpoints = static_cast<int>(std::floor((4.0/6.0) * drone_seg.t_values.size() / div_number));
 
   for (int i = 0; i < div_number; i++) {
-    double start_range = drone_seg.t_values.front() + i * div_length;
-    double end_range = (i == div_number - 1) ? drone_seg.t_values.back() : start_range + div_length;
+    double start_range = drone_seg.t_values.front() + i * div_length_t;
+    double end_range = (i == div_number - 1) ? drone_seg.t_values.back() : start_range + div_length_t;
     int count = 0;
     
     for (const double& t : drone_seg.t_values) {
@@ -373,18 +383,19 @@ void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments){
 
 
     if (new_pca_coeff < min_pca_coeff || drone_seg.points.size() < min_nb_points_seg || !integrity) {
+      // if (new_pca_coeff < min_pca_coeff || drone_seg.points.size() < min_nb_points_seg) {
       add_seg = false;
       continue;
     }
 
-    double epsilon = 2*opt_dx + 2*drone_seg.radius;
-    
     for (size_t i = 0; i < world_segments.size(); ++i) {
       Eigen::Vector3d world_seg_p1 = world_segments[i].t_min * world_segments[i].b + world_segments[i].a;
       Eigen::Vector3d world_seg_p2 = world_segments[i].t_max * world_segments[i].b + world_segments[i].a;
 
       Eigen::Vector3d test_seg_proj_p1 = find_proj(world_segments[i].a, world_segments[i].b, test_seg_p1);
       Eigen::Vector3d test_seg_proj_p2 = find_proj(world_segments[i].a, world_segments[i].b, test_seg_p2);
+
+      double epsilon = drone_seg.radius + world_segments[i].radius + 2*2*opt_dx;
 
       if (((test_seg_proj_p1-test_seg_p1).norm() < epsilon) && 
           ((test_seg_proj_p2-test_seg_p2).norm() < epsilon) && 
@@ -394,7 +405,8 @@ void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments){
           ROS_INFO("Segments are close, checking for similarity");
         }
 
-        double learning_rate = new_pca_coeff/(world_segments[i].pca_coeff*world_segments[i].num_pca+new_pca_coeff);
+        // double learning_rate = new_pca_coeff/(world_segments[i].pca_coeff*world_segments[i].num_pca+new_pca_coeff);
+        double learning_rate = (new_pca_coeff*drone_seg.points.size())/(world_segments[i].pca_coeff*world_segments[i].points.size()+new_pca_coeff*drone_seg.points.size());
 
         Eigen::Vector3d new_world_seg_a = test_seg_proj_p1 + learning_rate*(test_seg_p1 - test_seg_proj_p1);
         Eigen::Vector3d new_world_seg_b = (test_seg_proj_p2-test_seg_proj_p1) +
@@ -410,8 +422,8 @@ void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments){
         double world_seg_proj_t1 = (world_seg_proj_p1.x() - new_world_seg_a.x()) / new_world_seg_b.x();
         double world_seg_proj_t2 = (world_seg_proj_p2.x() - new_world_seg_a.x()) / new_world_seg_b.x();
         
-        if (!(std::min(test_seg_proj_t1, test_seg_proj_t2)>std::max(world_seg_proj_t1, world_seg_proj_t2)) ||
-              (std::max(test_seg_proj_t1, test_seg_proj_t2)<std::min(world_seg_proj_t1, world_seg_proj_t2))){
+        if (!((std::min(test_seg_proj_t1, test_seg_proj_t2)>std::max(world_seg_proj_t1, world_seg_proj_t2)) ||
+              (std::max(test_seg_proj_t1, test_seg_proj_t2)<std::min(world_seg_proj_t1, world_seg_proj_t2)))){
 
           if (verbose_level > NONE){
             ROS_INFO("The 2 segments are similar");
@@ -429,7 +441,9 @@ void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments){
           modif_seg.t_min = *std::min_element(list_t.begin(), list_t.end());
           modif_seg.radius = drone_seg.radius;
           modif_seg.points.insert(modif_seg.points.end(), drone_seg.points.begin(), drone_seg.points.end());
-          modif_seg.pca_coeff = (modif_seg.pca_coeff*modif_seg.num_pca+new_pca_coeff)/(modif_seg.num_pca+1);
+          // modif_seg.pca_coeff = (modif_seg.pca_coeff*modif_seg.num_pca+new_pca_coeff)/(modif_seg.num_pca+1);
+          modif_seg.pca_coeff = (modif_seg.pca_coeff*world_segments[i].points.size()+new_pca_coeff*drone_seg.points.size())/modif_seg.points.size();
+          
           modif_seg.num_pca += 1;
 
           world_segments[i] = modif_seg;
@@ -443,7 +457,7 @@ void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments){
 
       std::cout << "-----------------------------------" << std::endl;
       std::cout << "segment number " << world_segments.size() << " added" << std::endl;
-      std::cout << "integrity: " << integrity << std::endl;
+      // std::cout << "integrity: " << integrity << std::endl;
       std::cout << "new_pca_coeff: " << new_pca_coeff << std::endl;
       std::cout << "min_nb_points_seg: " << min_nb_points_seg << std::endl;
       std::cout << "drone_seg.points.size(): " << drone_seg.points.size() << std::endl;
@@ -617,9 +631,9 @@ void PtCdProcessing::visualization() {
     text_marker.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
     text_marker.pose.position.x = (segment_p1.x() + segment_p2.x()) / 2.0;
     text_marker.pose.position.y = (segment_p1.y() + segment_p2.y()) / 2.0;
-    text_marker.pose.position.z = (segment_p1.z() + segment_p2.z()) / 2.0 + 0.5;
+    text_marker.pose.position.z = (segment_p1.z() + segment_p2.z()) / 2.0 ;
     text_marker.text = std::to_string(i);
-    text_marker.scale.z = 0.4;
+    text_marker.scale.z = 0.1;
     text_marker.color.r = 1.0;
     text_marker.color.g = 1.0;
     text_marker.color.b = 1.0;

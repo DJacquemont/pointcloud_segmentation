@@ -5,13 +5,13 @@ verbose_level: 0
 floor_trim_height: 0.3
 
 # min_pca_coeff: minimum pca coeff to be considered as a line
-min_pca_coeff: 0.90
+min_pca_coeff: 0.95
 
 # opt_minvotes: minimum votes to be considered as a line
 opt_minvotes: 12
 
 # opt_nlines: number of lines to be detected
-opt_nlines: 5
+opt_nlines: 10
 
 # radius_sizes: beam radius sizes
 radius_sizes:

@@ -23,7 +23,11 @@ struct segment {
   int num_pca;
 };
 
-void find_t(Eigen::Vector3d a, Eigen::Vector3d b, Eigen::Vector3d p, std::vector<double>& t_values, std::vector<double>& p_norm){
+int find_t(Eigen::Vector3d a, Eigen::Vector3d b, Eigen::Vector3d p, std::vector<double>& t_values, std::vector<double>& p_norm){
+
+  if (b.x() == 0) {
+    return 1;
+  }
 
   // t is similar for x, y and z
   double t = (p.x() - a.x()) / b.x();
@@ -45,6 +49,7 @@ void find_t(Eigen::Vector3d a, Eigen::Vector3d b, Eigen::Vector3d p, std::vector
     // Calculate the norm of p corresponding to t and insert it at the same index
     p_norm.insert(p_norm.begin() + index, (a + t * b).norm());
   }
+  return 0;
 }
 
 Eigen::Vector3d find_proj(Eigen::Vector3d a, Eigen::Vector3d b, Eigen::Vector3d p){
@@ -102,8 +107,7 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<segment>& compu
     float z = pc.points[currentPoint].z;
 
     // Cleaning the PointCloud from NaNs & Inf
-    if (!(isnan(x) || isinf(x)) && !(isnan(y) ||
-             isinf(y)) && !(isnan(z) && isinf(z))){
+    if (!(isnan(x) || isinf(x)) && !(isnan(y) || isinf(y)) && !(isnan(z) || isinf(z))){
       point.x = x;
       point.y = y;
       point.z = z;
@@ -111,6 +115,9 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<segment>& compu
       X.points.push_back(point);
     }
   }
+
+  
+
 
   // number of icosahedron subdivisions for direction discretization
   const int granularity = 4;
@@ -197,28 +204,45 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<segment>& compu
       Vector3d point = *it + X.shift;
       Eigen::Vector3d point_eigen(point.x, point.y, point.z);
       Eigen::Vector3d p_proj = find_proj(a_eigen, b_eigen, point_eigen);
+
       p_radius.push_back((p_proj - point_eigen).norm());
-      find_t(a_eigen, b_eigen, p_proj, t_values, p_norm);
+      if (find_t(a_eigen, b_eigen, p_proj, t_values, p_norm)){
+        // no solution for t
+        return 1;
+      }
 
       // saving points
       points.push_back(point_eigen);
     }
 
-    double radius = std::max(p_radius[0], p_radius[p_radius.size()-1]);
+    // finds largest distance between 2 neighbors points on the line using p_norm
+    double max_dist = 0;
+    for (int i = 0; i < p_norm.size()-1; i++){
+      double dist = std::abs(p_norm[i+1] - p_norm[i]);
+      if (dist > max_dist){
+        max_dist = dist;
+      }
+    }
 
-    double closest_radius = radius_sizes[0];
-    double min_radius_diff = std::abs(radius - radius_sizes[0]);
+
+    double radius = std::max(p_radius.front(), p_radius.back());
+    double closest_radius = radius_sizes.front();
+    double min_radius_diff = std::abs(radius - radius_sizes.front());
+    double max_radius = std::abs(radius - radius_sizes.front());
     for (double r : radius_sizes) {
       double current_difference = std::abs(radius - r);
       if (current_difference < min_radius_diff) {
           min_radius_diff = current_difference;
           closest_radius = r;
       }
+      if (r > max_radius) {
+          max_radius = r;
+      }
     }
     
 
     // add line to vector
-    if (min_radius_diff < opt_dx){
+    if (min_radius_diff < opt_dx && max_radius <= closest_radius && max_dist < 2*opt_dx){
 
       Eigen::Vector3d p1 = a_eigen + t_values.front() *b_eigen;
       Eigen::Vector3d p2 = a_eigen + t_values.back() *b_eigen;
