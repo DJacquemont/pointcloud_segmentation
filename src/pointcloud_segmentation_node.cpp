@@ -23,14 +23,7 @@ using namespace std::chrono;
 
 enum verbose {NONE, INFO, WARN};
 
-/**
- * @brief Stucture storing the pose of the drone
- * 
- */
-struct pose {
-    Eigen::Vector3d position;
-    Eigen::Quaterniond orientation;
-};
+const double WINDOW_FILTERING_SIZE = 3.0;
 
 
 /**
@@ -44,6 +37,11 @@ class PtCdProcessing
   struct SharedData {
     sensor_msgs::PointCloud2 latestMsg;
     bool newDataAvailable = false;
+  };
+
+  struct pose {
+    Eigen::Vector3d position;
+    Eigen::Quaterniond orientation;
   };
 
 public:
@@ -77,7 +75,8 @@ public:
 
   int closestDronePose(const ros::Time& timestamp);
 
-  void cloudFiltering(pcl::PCLPointCloud2::Ptr& cloud, pcl::PointCloud<pcl::PointXYZ>::Ptr& filtered_cloud_XYZ);
+  void cloudFiltering(const pcl::PCLPointCloud2::Ptr& input_cloud, 
+                      pcl::PointCloud<pcl::PointXYZ>::Ptr& output_filtered_cloud_XYZ);
 
   void drone2WorldSeg(std::vector<segment>& drone_segments);
 
@@ -135,7 +134,7 @@ private:
 
 
 /**
- * @brief Callback function receiving & processing ToF images from the Autopilot package
+ * @brief Callback function receiving ToF images from the Autopilot package
  * 
  * @param msg Message containing the point cloud
  * @return ** void 
@@ -143,7 +142,7 @@ private:
 void PtCdProcessing::pointcloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg)
 {
   std::lock_guard<std::mutex> lock(dataMutex);
-  sharedData.latestMsg = *msg; // Assuming copy assignment is available
+  sharedData.latestMsg = *msg;
   sharedData.newDataAvailable = true;
   dataCondition.notify_one();
 }
@@ -154,26 +153,53 @@ void PtCdProcessing::pointcloudCallback(const sensor_msgs::PointCloud2::ConstPtr
  * 
  * @return ** void
  */
-void PtCdProcessing::setParams(){
+void PtCdProcessing::setParams() {
   // Get parameters from the parameter server
   int verbose_level_int;
-  this->node.getParam("/verbose_level", verbose_level_int);
+  if (!this->node.getParam("/verbose_level", verbose_level_int)) {
+    ROS_ERROR("Failed to get param 'verbose_level'");
+    verbose_level_int = 0;
+  }
   verbose_level = static_cast<verbose>(verbose_level_int);
-  this->node.getParam("/floor_trim_height", floor_trim_height);
-  this->node.getParam("/min_pca_coeff", min_pca_coeff);
-  this->node.getParam("/opt_minvotes", opt_minvotes);
-  this->node.getParam("/opt_nlines", opt_nlines);
-  XmlRpc::XmlRpcValue radius_sizes_tmp;
-  if (this->node.getParam("/radius_sizes", radius_sizes_tmp)) {
-      radius_sizes.clear();
-      for (int32_t i = 0; i < radius_sizes_tmp.size(); ++i) {
-          radius_sizes.push_back(static_cast<double>(radius_sizes_tmp[i]));
-      }
+
+  if (!this->node.getParam("/floor_trim_height", floor_trim_height)) {
+    ROS_ERROR("Failed to get param 'floor_trim_height'");
+    floor_trim_height = 0.3;
   }
 
-  rad_2_leaf_ratio = 3.0 / 2.0;
-  leaf_size = std::min(radius_sizes[0], radius_sizes[radius_sizes.size()-1])/rad_2_leaf_ratio;
-  opt_dx = sqrt(3)*leaf_size;
+  if (!this->node.getParam("/min_pca_coeff", min_pca_coeff)) {
+    ROS_ERROR("Failed to get param 'min_pca_coeff'");
+    min_pca_coeff = 0.95;
+  }
+
+  if (!this->node.getParam("/rad_2_leaf_ratio", rad_2_leaf_ratio)) {
+    ROS_ERROR("Failed to get param 'rad_2_leaf_ratio'");
+    rad_2_leaf_ratio = 1.5;
+  }
+
+  if (!this->node.getParam("/opt_minvotes", opt_minvotes)) {
+    ROS_ERROR("Failed to get param 'opt_minvotes'");
+    opt_minvotes = 10;
+  }
+
+  if (!this->node.getParam("/opt_nlines", opt_nlines)) {
+    ROS_ERROR("Failed to get param 'opt_nlines'");
+    opt_nlines = 10;
+  }
+
+  XmlRpc::XmlRpcValue radius_sizes_tmp;
+  radius_sizes.clear();
+  if (this->node.getParam("/radius_sizes", radius_sizes_tmp)) {
+    for (int32_t i = 0; i < radius_sizes_tmp.size(); ++i) {
+      radius_sizes.push_back(static_cast<double>(radius_sizes_tmp[i]));
+    }
+  } else {
+    ROS_ERROR("Failed to get param 'radius_sizes'");
+    radius_sizes.push_back(static_cast<double>(0.05));
+  }
+
+  leaf_size = std::min(radius_sizes[0], radius_sizes[radius_sizes.size()-1]) / rad_2_leaf_ratio;
+  opt_dx = sqrt(3) * leaf_size;
 
   ROS_INFO("Configuration:");
   ROS_INFO("  verbose_level: %d", verbose_level);
@@ -181,11 +207,13 @@ void PtCdProcessing::setParams(){
   ROS_INFO("  min_pca_coeff: %f", min_pca_coeff);
   ROS_INFO("  opt_minvotes: %d", opt_minvotes);
   ROS_INFO("  opt_nlines: %d", opt_nlines);
-  ROS_INFO("  radius_sizes: %f, %f, %f, %f, %f, %f, %f", radius_sizes[0], radius_sizes[1], radius_sizes[2], 
-                                        radius_sizes[3], radius_sizes[4], radius_sizes[5], radius_sizes[6]);
+  ROS_INFO("  radius_sizes: %f, %f, %f, %f, %f, %f, %f", 
+            radius_sizes[0], radius_sizes[1], radius_sizes[2], radius_sizes[3], 
+            radius_sizes[4], radius_sizes[5], radius_sizes[6]);
   ROS_INFO("  leaf_size: %f", leaf_size);
   ROS_INFO("  opt_dx: %f", opt_dx);
 }
+
 
 
 /**
@@ -280,32 +308,36 @@ int PtCdProcessing::closestDronePose(const ros::Time& timestamp) {
  * @param cloud cloud to be filtered
  * @param filtered_cloud_XYZ filtered cloud
  */
-void PtCdProcessing::cloudFiltering(pcl::PCLPointCloud2::Ptr& cloud, 
-                                    pcl::PointCloud<pcl::PointXYZ>::Ptr& filtered_cloud_XYZ){
-  pcl::PCLPointCloud2::Ptr filtered_cloud (new pcl::PCLPointCloud2);
+void PtCdProcessing::cloudFiltering(const pcl::PCLPointCloud2::Ptr& input_cloud, 
+                                    pcl::PointCloud<pcl::PointXYZ>::Ptr& output_filtered_cloud_XYZ){
 
+  pcl::PCLPointCloud2::Ptr filtered_cloud (new pcl::PCLPointCloud2());
+
+  // Apply PassThrough filter for 'x', 'y', and 'z' fields
   pcl::PassThrough<pcl::PCLPointCloud2> pass;
-  pass.setInputCloud(cloud);
+
+  pass.setInputCloud(input_cloud);
   pass.setFilterFieldName("x");
-  pass.setFilterLimits(0.0f, 1.5f);
+  pass.setFilterLimits(0.0f, WINDOW_FILTERING_SIZE/2);
   pass.filter(*filtered_cloud);
 
   pass.setInputCloud(filtered_cloud);
   pass.setFilterFieldName("y");
-  pass.setFilterLimits(-1.5f, 1.5f);
+  pass.setFilterLimits(-WINDOW_FILTERING_SIZE/2, WINDOW_FILTERING_SIZE/2);
   pass.filter(*filtered_cloud);
 
   pass.setInputCloud(filtered_cloud);
   pass.setFilterFieldName("z");
-  pass.setFilterLimits(-1.5f, 1.5f);
+  pass.setFilterLimits(-WINDOW_FILTERING_SIZE/2, WINDOW_FILTERING_SIZE/2);
   pass.filter(*filtered_cloud);
 
+  // Applying VoxelGrid filter
   pcl::VoxelGrid<pcl::PCLPointCloud2> voxel_grid;
   voxel_grid.setInputCloud(filtered_cloud);
   voxel_grid.setLeafSize(leaf_size, leaf_size, leaf_size);
   voxel_grid.filter(*filtered_cloud);
 
-  pcl::fromPCLPointCloud2(*filtered_cloud, *filtered_cloud_XYZ );
+  pcl::fromPCLPointCloud2(*filtered_cloud, *output_filtered_cloud_XYZ );
 
   // Publishing PCL filtered cloud
   sensor_msgs::PointCloud2 output_filtered;
@@ -509,6 +541,9 @@ void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments){
           // modif_seg.pca_coeff = (modif_seg.pca_coeff*modif_seg.num_pca+new_pca_coeff)/(modif_seg.num_pca+1);
           modif_seg.pca_coeff = (modif_seg.pca_coeff*world_segments[i].points.size()+
                                                         new_pca_coeff*drone_seg.points.size())/modif_seg.points.size();
+          // modif_seg.pca_coeff = (modif_seg.pca_coeff*new_pca_coeff)/
+          //                   (modif_seg.pca_coeff*world_segments[i].points.size()+new_pca_coeff*drone_seg.points.size());
+          // modif_seg.pca_coeff = (modif_seg.pca_coeff*new_pca_coeff)/(modif_seg.pca_coeff+new_pca_coeff);
           
           modif_seg.num_pca += 1;
 
@@ -795,7 +830,7 @@ void PtCdProcessing::clearMarkers() {
 
 int main(int argc, char *argv[])
 {
-  ROS_INFO("Pointcloud semgmentation node starting");
+  ROS_INFO("Pointcloud segmentation node starting");
 
   ros::init(argc, argv, "pointcloud_seg");
 
