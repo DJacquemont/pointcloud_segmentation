@@ -19,7 +19,7 @@ void poseCallback(const geometry_msgs::PoseStamped::ConstPtr& msg)
   static tf2_ros::TransformBroadcaster br;
   geometry_msgs::TransformStamped transformStamped;
   
-  transformStamped.header.stamp = ros::Time::now();
+  transformStamped.header.stamp = msg->header.stamp;
   transformStamped.header.frame_id = "mocap";
   transformStamped.child_frame_id = "world";
   transformStamped.transform.translation.x = msg->pose.position.x;
@@ -47,7 +47,7 @@ int main(int argc, char* argv[]){
 
   ros::NodeHandle node;
 
-  ros::Subscriber pose_sub = node.subscribe("/mavros/local_position/pose", 1000, poseCallback);
+  ros::Subscriber pose_sub = node.subscribe("/mavros/local_position/pose", 0, poseCallback);
 
   ros::spin();
 

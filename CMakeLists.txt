@@ -161,7 +161,12 @@ include_directories(
 #   ${catkin_LIBRARIES}
 # )
 
-add_executable(${PROJECT_NAME}_node ${CMAKE_CURRENT_LIST_DIR}/src/pointcloud_segmentation_node.cpp ${CMAKE_CURRENT_LIST_DIR}/libraries/hough-3d-lines/vector3d.cpp ${CMAKE_CURRENT_LIST_DIR}/libraries/hough-3d-lines/pointcloud.cpp ${CMAKE_CURRENT_LIST_DIR}/libraries/hough-3d-lines/hough.cpp ${CMAKE_CURRENT_LIST_DIR}/libraries/hough-3d-lines/sphere.cpp )
+add_executable(${PROJECT_NAME}_node ${CMAKE_CURRENT_LIST_DIR}/src/pointcloud_segmentation_node.cpp 
+                                    ${CMAKE_CURRENT_LIST_DIR}/libraries/hough-3d-lines/vector3d.cpp 
+                                    ${CMAKE_CURRENT_LIST_DIR}/libraries/hough-3d-lines/pointcloud.cpp 
+                                    ${CMAKE_CURRENT_LIST_DIR}/libraries/hough-3d-lines/hough.cpp 
+                                    ${CMAKE_CURRENT_LIST_DIR}/libraries/hough-3d-lines/sphere.cpp)
+
 target_link_libraries(${PROJECT_NAME}_node
   ${catkin_LIBRARIES}
 )

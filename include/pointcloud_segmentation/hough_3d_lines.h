@@ -1,3 +1,6 @@
+// This file is a direct adaptation of the hough3dlines.cpp file from the library hough-3d-lines 
+// (libraries/hough-3d-lines/hough3dlines.cpp). This adaptation allows for the use of the hough algorithm in a ROS node.
+
 #include <sensor_msgs/PointCloud2.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <visualization_msgs/Marker.h>
