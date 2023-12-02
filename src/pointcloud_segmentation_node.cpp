@@ -124,6 +124,7 @@ private:
   enum verbose verbose_level;
   double floor_trim_height;
   double min_pca_coeff;
+  double min_lr_coeff;
   int opt_minvotes;
   int opt_nlines;
   std::vector<double> radius_sizes;
@@ -172,6 +173,11 @@ void PtCdProcessing::setParams() {
     min_pca_coeff = 0.95;
   }
 
+  if (!this->node.getParam("/min_lr_coeff", min_lr_coeff)) {
+    ROS_ERROR("Failed to get param 'min_lr_coeff'");
+    min_pca_coeff = 0.1;
+  }
+
   if (!this->node.getParam("/rad_2_leaf_ratio", rad_2_leaf_ratio)) {
     ROS_ERROR("Failed to get param 'rad_2_leaf_ratio'");
     rad_2_leaf_ratio = 1.5;
@@ -205,6 +211,7 @@ void PtCdProcessing::setParams() {
   ROS_INFO("  verbose_level: %d", verbose_level);
   ROS_INFO("  floor_trim_height: %f", floor_trim_height);
   ROS_INFO("  min_pca_coeff: %f", min_pca_coeff);
+  ROS_INFO("  min_lr_coeff: %f", min_lr_coeff);
   ROS_INFO("  opt_minvotes: %d", opt_minvotes);
   ROS_INFO("  opt_nlines: %d", opt_nlines);
   ROS_INFO("  radius_sizes: %f, %f, %f, %f, %f, %f, %f", 
@@ -375,8 +382,9 @@ void PtCdProcessing::drone2WorldSeg(std::vector<segment>& drone_segments){
 
       test_seg.t_values = drone_seg.t_values;
       test_seg.radius = drone_seg.radius;
+      test_seg.points_size = drone_seg.points_size;
       test_seg.pca_coeff = drone_seg.pca_coeff;
-      test_seg.num_pca = drone_seg.num_pca;
+      test_seg.pca_eigenvalues = drone_seg.pca_eigenvalues;
 
       for (const Eigen::Vector3d& point : drone_seg.points){
         test_seg.points.push_back(rotation_matrix * point + drone.position);
@@ -491,7 +499,7 @@ void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments){
       Eigen::Vector3d test_seg_proj_p1 = find_proj(world_segments[i].a, world_segments[i].b, test_seg_p1);
       Eigen::Vector3d test_seg_proj_p2 = find_proj(world_segments[i].a, world_segments[i].b, test_seg_p2);
 
-      double epsilon = drone_seg.radius + world_segments[i].radius + 2*2*opt_dx;
+      double epsilon = drone_seg.radius + world_segments[i].radius + 2*(2*opt_dx);
 
       if (((test_seg_proj_p1-test_seg_p1).norm() < epsilon) && 
           ((test_seg_proj_p2-test_seg_p2).norm() < epsilon) && 
@@ -501,9 +509,14 @@ void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments){
           ROS_INFO("Segments are close, checking for similarity");
         }
 
+        double lr_coeff = drone_seg.points.size()/(world_segments[i].points.size()+drone_seg.points.size());
+        lr_coeff = (lr_coeff < min_lr_coeff) ? min_lr_coeff : lr_coeff;
+
         // double learning_rate = new_pca_coeff/(world_segments[i].pca_coeff*world_segments[i].num_pca+new_pca_coeff);
-        double learning_rate = (new_pca_coeff*drone_seg.points.size())/
-                    (world_segments[i].pca_coeff*world_segments[i].points.size()+new_pca_coeff*drone_seg.points.size());
+        // double learning_rate = (new_pca_coeff*drone_seg.points.size())/
+        //             (world_segments[i].pca_coeff*world_segments[i].points.size()+new_pca_coeff*drone_seg.points.size());
+        double learning_rate = (new_pca_coeff*lr_coeff)/
+                                (world_segments[i].pca_coeff*(1-lr_coeff) + new_pca_coeff*lr_coeff);
 
         Eigen::Vector3d new_world_seg_a = test_seg_proj_p1 + learning_rate*(test_seg_p1 - test_seg_proj_p1);
         Eigen::Vector3d new_world_seg_b = (test_seg_proj_p2-test_seg_proj_p1) +
@@ -537,15 +550,19 @@ void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments){
           modif_seg.t_max = *std::max_element(list_t.begin(), list_t.end());
           modif_seg.t_min = *std::min_element(list_t.begin(), list_t.end());
           modif_seg.radius = drone_seg.radius;
+          modif_seg.points_size = modif_seg.points_size + drone_seg.points_size;
           modif_seg.points.insert(modif_seg.points.end(), drone_seg.points.begin(), drone_seg.points.end());
           // modif_seg.pca_coeff = (modif_seg.pca_coeff*modif_seg.num_pca+new_pca_coeff)/(modif_seg.num_pca+1);
-          modif_seg.pca_coeff = (modif_seg.pca_coeff*world_segments[i].points.size()+
-                                                        new_pca_coeff*drone_seg.points.size())/modif_seg.points.size();
+          // modif_seg.pca_coeff = (modif_seg.pca_coeff*world_segments[i].points.size()+
+          //                                               new_pca_coeff*drone_seg.points.size())/modif_seg.points.size();
+          modif_seg.pca_coeff = modif_seg.pca_coeff*(1-lr_coeff) + new_pca_coeff*lr_coeff;
           // modif_seg.pca_coeff = (modif_seg.pca_coeff*new_pca_coeff)/
           //                   (modif_seg.pca_coeff*world_segments[i].points.size()+new_pca_coeff*drone_seg.points.size());
           // modif_seg.pca_coeff = (modif_seg.pca_coeff*new_pca_coeff)/(modif_seg.pca_coeff+new_pca_coeff);
           
-          modif_seg.num_pca += 1;
+          // modif_seg.pca_eigenvalues = (modif_seg.pca_eigenvalues*world_segments[i].points.size()+
+          //                                               eigenvalues*drone_seg.points.size())/modif_seg.points.size();
+          modif_seg.pca_eigenvalues = modif_seg.pca_eigenvalues*(1-lr_coeff) + eigenvalues*lr_coeff;
 
           world_segments[i] = modif_seg;
         }
@@ -560,7 +577,7 @@ void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments){
 
       segment added = drone_seg; 
       added.pca_coeff = new_pca_coeff;
-      added.num_pca = 1;
+      added.pca_eigenvalues = eigenvalues;
       world_segments.push_back(added);
     }
   }

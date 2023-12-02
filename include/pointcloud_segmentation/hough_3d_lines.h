@@ -1,5 +1,6 @@
 // This file is a direct adaptation of the hough3dlines.cpp file from the library hough-3d-lines 
-// (libraries/hough-3d-lines/hough3dlines.cpp). This adaptation allows for the use of the hough algorithm in a ROS node.
+// (libraries/hough-3d-lines/hough3dlines.cpp). 
+// This adaptation allows for the use of the hough algorithm in a ROS node.
 
 #include <sensor_msgs/PointCloud2.h>
 #include <pcl_conversions/pcl_conversions.h>
@@ -23,8 +24,9 @@ struct segment {
   std::vector<double> t_values;
   double radius;
   std::vector<Eigen::Vector3d> points;
+  int points_size;
   double pca_coeff;
-  int num_pca;
+  Eigen::Vector3d pca_eigenvalues;
 };
 
 /**
@@ -292,8 +294,9 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<segment>& compu
       l.t_values = t_values;
       l.radius = closest_radius;      
       l.points = points;
+      l.points_size = points.size();
       l.pca_coeff = 0;
-      l.num_pca = 0;
+      l.pca_eigenvalues = Eigen::Vector3d(0,0,0);
 
       computed_lines.push_back(l);
     }
