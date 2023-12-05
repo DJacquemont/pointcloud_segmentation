@@ -161,9 +161,10 @@ double orthogonal_LSQ(const PointCloud &pc, Vector3d* a, Vector3d* b){
  * @param VERBOSE verbosity level
  * @return int 0 if successful, 1 otherwise
  */
-int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<segment>& computed_lines, 
-                  double opt_dx, std::vector<double> radius_sizes, int opt_minvotes, 
-                  int opt_nlines, double min_pca_coeff, double rad_2_leaf_ratio, int VERBOSE){
+int hough3dlines(const pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<segment>& computed_lines, 
+                  const double opt_dx, const int granularity, const std::vector<double> radius_sizes, 
+                  const int opt_minvotes, const int opt_nlines, const double min_pca_coeff, 
+                  const double rad_2_leaf_ratio, const int VERBOSE){
 
   PointCloud X;
   Vector3d point;
@@ -185,7 +186,6 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<segment>& compu
   }
 
   // number of icosahedron subdivisions for direction discretization
-  const int granularity = 4;
   const int num_directions[7] = {12, 21, 81, 321, 1281, 5121, 20481};
 
   // bounding box of point cloud

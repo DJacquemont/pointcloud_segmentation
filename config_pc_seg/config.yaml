@@ -16,6 +16,9 @@ rad_2_leaf_ratio: 1.5
 # opt_minvotes: minimum votes to be considered as a line
 opt_minvotes: 12
 
+# granularity: granularity of the search (Hough transform) between 0 and 6
+granularity: 6
+
 # opt_nlines: number of lines to be detected
 opt_nlines: 10
 

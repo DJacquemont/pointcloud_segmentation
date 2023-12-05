@@ -123,6 +123,7 @@ private:
   std::vector<double> radius_sizes;
   double leaf_size;
   double opt_dx;
+  int granularity;
   double rad_2_leaf_ratio;
 };
 
@@ -181,6 +182,11 @@ void PtCdProcessing::setParams() {
     opt_minvotes = 10;
   }
 
+  if (!this->node.getParam("/granularity", granularity)) {
+    ROS_ERROR("Failed to get param 'granularity'");
+    granularity = 4;
+  }
+
   if (!this->node.getParam("/opt_nlines", opt_nlines)) {
     ROS_ERROR("Failed to get param 'opt_nlines'");
     opt_nlines = 10;
@@ -211,6 +217,7 @@ void PtCdProcessing::setParams() {
             radius_sizes[0], radius_sizes[1], radius_sizes[2]);
   ROS_INFO("  leaf_size: %f", leaf_size);
   ROS_INFO("  opt_dx: %f", opt_dx);
+  ROS_INFO("  granularity: %d", granularity);
 }
 
 
@@ -246,7 +253,7 @@ void PtCdProcessing::processData() {
 
     // segment extraction with the Hough transform
     std::vector<segment> drone_segments;
-    if (hough3dlines(*filtered_cloud_XYZ, drone_segments, opt_dx, radius_sizes, 
+    if (hough3dlines(*filtered_cloud_XYZ, drone_segments, opt_dx, granularity, radius_sizes, 
                     opt_minvotes, opt_nlines, min_pca_coeff, rad_2_leaf_ratio, verbose_level) 
                     && verbose_level > INFO){
       ROS_WARN("Unable to perform the Hough transform");
