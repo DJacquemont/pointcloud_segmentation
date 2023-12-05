@@ -4,7 +4,6 @@
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/filters/passthrough.h>
 #include <pcl/common/common.h>
-#include <pcl/common/pca.h>
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <geometry_msgs/PoseStamped.h>
@@ -80,10 +79,6 @@ public:
 
   void drone2WorldSeg(std::vector<segment>& drone_segments);
 
-  Eigen::Vector3d segPCA(const segment&);
-
-  bool integrityCheck(const segment& drone_seg);
-
   void segFiltering(std::vector<segment>& drone_segments);
 
   void intersectionSearch();
@@ -91,8 +86,6 @@ public:
   void visualization();
 
   void clearMarkers();
-
-  void outputSegment();
 
 private:
   ros::NodeHandle node;
@@ -214,9 +207,8 @@ void PtCdProcessing::setParams() {
   ROS_INFO("  min_lr_coeff: %f", min_lr_coeff);
   ROS_INFO("  opt_minvotes: %d", opt_minvotes);
   ROS_INFO("  opt_nlines: %d", opt_nlines);
-  ROS_INFO("  radius_sizes: %f, %f, %f, %f, %f, %f, %f", 
-            radius_sizes[0], radius_sizes[1], radius_sizes[2], radius_sizes[3], 
-            radius_sizes[4], radius_sizes[5], radius_sizes[6]);
+  ROS_INFO("  radius_sizes: %f, %f, %f", 
+            radius_sizes[0], radius_sizes[1], radius_sizes[2]);
   ROS_INFO("  leaf_size: %f", leaf_size);
   ROS_INFO("  opt_dx: %f", opt_dx);
 }
@@ -231,7 +223,7 @@ void PtCdProcessing::setParams() {
 void PtCdProcessing::processData() {
   while (running) {
     std::unique_lock<std::mutex> lock(dataMutex);
-    dataCondition.wait(lock, [this] { return sharedData.newDataAvailable; });
+    dataCondition.wait(lock, [this] { return sharedData.newDataAvailable || !running; });
 
     // Process the latest message
     auto latestMsgCopy = sharedData.latestMsg;
@@ -254,9 +246,9 @@ void PtCdProcessing::processData() {
 
     // segment extraction with the Hough transform
     std::vector<segment> drone_segments;
-    // const double opt_dx = sqrt(3)*leaf_size; // optimal discretization step
-    if (hough3dlines(*filtered_cloud_XYZ, drone_segments, opt_dx, radius_sizes, opt_minvotes, opt_nlines, verbose_level) 
-        && verbose_level > INFO){
+    if (hough3dlines(*filtered_cloud_XYZ, drone_segments, opt_dx, radius_sizes, 
+                    opt_minvotes, opt_nlines, min_pca_coeff, rad_2_leaf_ratio, verbose_level) 
+                    && verbose_level > INFO){
       ROS_WARN("Unable to perform the Hough transform");
     }
 
@@ -270,6 +262,27 @@ void PtCdProcessing::processData() {
     intersectionSearch();
 
     visualization();
+
+    // Print all the segments
+    if (verbose_level > INFO){
+      ROS_INFO("Number of segments: %lu", world_segments.size());
+      for (size_t i = 0; i < world_segments.size(); ++i) {
+        ROS_INFO("Segment %lu: a = (%f, %f, %f), t_min = %f, t_max = %f", 
+                  i, world_segments[i].a.x(), world_segments[i].a.y(), world_segments[i].a.z(), 
+                  world_segments[i].t_min, world_segments[i].t_max);
+      }
+    }
+
+    // Print the matrix of intersections
+    if (verbose_level > INFO){
+      ROS_INFO("Intersection matrix:");
+      for (size_t i = 0; i < intersection_matrix.size(); ++i) {
+        for (size_t j = 0; j < i; ++j) {
+          ROS_INFO("intersection_matrix[%lu][%lu] = (%f, %f)", i, j, 
+                    std::get<0>(intersection_matrix[i][j]), std::get<1>(intersection_matrix[i][j]));
+        }
+      }
+    }
 
     auto callEnd = high_resolution_clock::now();
     if (verbose_level > NONE){
@@ -380,7 +393,6 @@ void PtCdProcessing::drone2WorldSeg(std::vector<segment>& drone_segments){
 
     if (test_seg_p1.z() > floor_trim_height || test_seg_p2.z() > floor_trim_height){
 
-      test_seg.t_values = drone_seg.t_values;
       test_seg.radius = drone_seg.radius;
       test_seg.points_size = drone_seg.points_size;
       test_seg.pca_coeff = drone_seg.pca_coeff;
@@ -395,69 +407,6 @@ void PtCdProcessing::drone2WorldSeg(std::vector<segment>& drone_segments){
   }
 
   drone_segments = valid_segments;
-}
-
-
-/**
- * @brief Computing the PCA of the segment's points
- * 
- * @param drone_seg segment in the drone's frame
- * @return Eigen::Vector3d Eigenvalues
- */
-Eigen::Vector3d PtCdProcessing::segPCA(const segment& drone_seg) {
-
-  // Extract points from drone_seg and create a PCL point cloud
-  pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
-  for (const auto& point : drone_seg.points) {
-    cloud->points.push_back(pcl::PointXYZ(point.x(), point.y(), point.z()));
-  }
-
-  // Performing PCA using PCL
-  pcl::PCA<pcl::PointXYZ> pca;
-  pca.setInputCloud(cloud);
-
-  // Eigenvalues are in descending order
-  Eigen::Vector3d eigenvalues = pca.getEigenValues().cast<double>();
-  
-  return eigenvalues;
-}
-
-
-/**
- * @brief Check the integrity of the segment
- * 
- * @param drone_seg segment in the drone's frame
- * @return true if the segment is valid
- * @return false if the segment is invalid
- */
-bool PtCdProcessing::integrityCheck(const segment& drone_seg){
-
-  // check integrity of the segment
-  bool seg_integrity = true;
-
-  Eigen::Vector3d drone_seg_p1 = drone_seg.t_min * drone_seg.b + drone_seg.a;
-  Eigen::Vector3d drone_seg_p2 = drone_seg.t_max * drone_seg.b + drone_seg.a;
-  int div_number = static_cast<int>(std::max(3.0, (drone_seg_p2-drone_seg_p1).norm()) / (opt_dx*opt_minvotes));
-  // int div_number = static_cast<int>(std::floor(3*drone_seg.t_values.size() / opt_minvotes));
-  double div_length_t = (drone_seg.t_values.back() - drone_seg.t_values.front()) / div_number;
-  int div_minpoints = static_cast<int>(std::floor((4.0/6.0) * drone_seg.t_values.size() / div_number));
-
-  for (int i = 0; i < div_number; i++) {
-    double start_range = drone_seg.t_values.front() + i * div_length_t;
-    double end_range = (i == div_number - 1) ? drone_seg.t_values.back() : start_range + div_length_t;
-    int count = 0;
-    
-    for (const double& t : drone_seg.t_values) {
-      if (t >= start_range && t <= end_range) {
-        ++count;
-      }
-    }
-
-    if (count < div_minpoints) {
-      return false;
-    }
-  }
-  return true;
 }
 
 
@@ -477,20 +426,6 @@ void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments){
 
     Eigen::Vector3d test_seg_p1 = drone_seg.t_min * drone_seg.b + drone_seg.a;
     Eigen::Vector3d test_seg_p2 = drone_seg.t_max * drone_seg.b + drone_seg.a;
-    
-    Eigen::Vector3d eigenvalues = segPCA(drone_seg);
-    double new_pca_coeff = eigenvalues[0] / (eigenvalues[0] + eigenvalues[1] + eigenvalues[2]);
-
-    double length_seg = (test_seg_p2 - test_seg_p1).norm();
-    int min_nb_points_seg = static_cast<int>(2.0*drone_seg.radius*length_seg/(rad_2_leaf_ratio*2*opt_dx*2*opt_dx));
-
-    bool integrity = integrityCheck(drone_seg);
-
-    if (new_pca_coeff < min_pca_coeff || drone_seg.points.size() < min_nb_points_seg || !integrity) {
-      // if (new_pca_coeff < min_pca_coeff || drone_seg.points.size() < min_nb_points_seg) {
-      add_seg = false;
-      continue;
-    }
 
     for (size_t i = 0; i < world_segments.size(); ++i) {
       Eigen::Vector3d world_seg_p1 = world_segments[i].t_min * world_segments[i].b + world_segments[i].a;
@@ -509,14 +444,11 @@ void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments){
           ROS_INFO("Segments are close, checking for similarity");
         }
 
-        double lr_coeff = drone_seg.points.size()/(world_segments[i].points.size()+drone_seg.points.size());
+        double lr_coeff = drone_seg.points_size/(world_segments[i].points_size + drone_seg.points_size);
         lr_coeff = (lr_coeff < min_lr_coeff) ? min_lr_coeff : lr_coeff;
 
-        // double learning_rate = new_pca_coeff/(world_segments[i].pca_coeff*world_segments[i].num_pca+new_pca_coeff);
-        // double learning_rate = (new_pca_coeff*drone_seg.points.size())/
-        //             (world_segments[i].pca_coeff*world_segments[i].points.size()+new_pca_coeff*drone_seg.points.size());
-        double learning_rate = (new_pca_coeff*lr_coeff)/
-                                (world_segments[i].pca_coeff*(1-lr_coeff) + new_pca_coeff*lr_coeff);
+        double learning_rate = (drone_seg.pca_coeff*lr_coeff)/
+                                (world_segments[i].pca_coeff*(1-lr_coeff) + drone_seg.pca_coeff*lr_coeff);
 
         Eigen::Vector3d new_world_seg_a = test_seg_proj_p1 + learning_rate*(test_seg_p1 - test_seg_proj_p1);
         Eigen::Vector3d new_world_seg_b = (test_seg_proj_p2-test_seg_proj_p1) +
@@ -552,17 +484,8 @@ void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments){
           modif_seg.radius = drone_seg.radius;
           modif_seg.points_size = modif_seg.points_size + drone_seg.points_size;
           modif_seg.points.insert(modif_seg.points.end(), drone_seg.points.begin(), drone_seg.points.end());
-          // modif_seg.pca_coeff = (modif_seg.pca_coeff*modif_seg.num_pca+new_pca_coeff)/(modif_seg.num_pca+1);
-          // modif_seg.pca_coeff = (modif_seg.pca_coeff*world_segments[i].points.size()+
-          //                                               new_pca_coeff*drone_seg.points.size())/modif_seg.points.size();
-          modif_seg.pca_coeff = modif_seg.pca_coeff*(1-lr_coeff) + new_pca_coeff*lr_coeff;
-          // modif_seg.pca_coeff = (modif_seg.pca_coeff*new_pca_coeff)/
-          //                   (modif_seg.pca_coeff*world_segments[i].points.size()+new_pca_coeff*drone_seg.points.size());
-          // modif_seg.pca_coeff = (modif_seg.pca_coeff*new_pca_coeff)/(modif_seg.pca_coeff+new_pca_coeff);
-          
-          // modif_seg.pca_eigenvalues = (modif_seg.pca_eigenvalues*world_segments[i].points.size()+
-          //                                               eigenvalues*drone_seg.points.size())/modif_seg.points.size();
-          modif_seg.pca_eigenvalues = modif_seg.pca_eigenvalues*(1-lr_coeff) + eigenvalues*lr_coeff;
+          modif_seg.pca_coeff = modif_seg.pca_coeff*(1-lr_coeff) + drone_seg.pca_coeff*lr_coeff;
+          modif_seg.pca_eigenvalues = modif_seg.pca_eigenvalues*(1-lr_coeff) + drone_seg.pca_eigenvalues*lr_coeff;
 
           world_segments[i] = modif_seg;
         }
@@ -573,11 +496,9 @@ void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments){
 
     if (add_seg) {
 
-      integrityCheck(drone_seg);
-
       segment added = drone_seg; 
-      added.pca_coeff = new_pca_coeff;
-      added.pca_eigenvalues = eigenvalues;
+      added.pca_coeff = drone_seg.pca_coeff;
+      added.pca_eigenvalues = drone_seg.pca_eigenvalues;
       world_segments.push_back(added);
     }
   }
@@ -607,7 +528,7 @@ void PtCdProcessing::intersectionSearch(){
     const segment world_seg_1 = world_segments[i];
     bool hasIntersection = false;
 
-    for (size_t j = i + 1; j < world_segments.size(); ++j) {
+    for (size_t j = 0; j < i; ++j) {
       const segment world_seg_2 = world_segments[j];
 
       double epsilon = 2*opt_dx + world_seg_1.radius + world_seg_2.radius;
@@ -631,14 +552,9 @@ void PtCdProcessing::intersectionSearch(){
       
       double dist_intersection = abs(solution[2]);
 
-      double tolerance_coef = 0.05;
-      double tol_seg_1 = tolerance_coef * (world_seg_1.t_max - world_seg_1.t_min);
-      double tol_seg_2 = tolerance_coef * (world_seg_2.t_max - world_seg_2.t_min);
-      if (((solution[0] >= (world_seg_1.t_min-tol_seg_1) && solution[0] <= (world_seg_1.t_max+tol_seg_1)) &&
-          (solution[1] >= (world_seg_2.t_min-tol_seg_2) && solution[1] <= (world_seg_2.t_max+tol_seg_2))) &&
+      if ((((solution[0] + world_seg_1.t_min) >= world_seg_1.t_min) && ((solution[0] + world_seg_1.t_min) <= world_seg_1.t_max)) &&
+          (((solution[1] + world_seg_2.t_min) >= world_seg_2.t_min) && ((solution[1] + world_seg_2.t_min) <= world_seg_2.t_max)) &&
           dist_intersection < epsilon) {
-
-        Eigen::Vector3d intersection_point = world_seg_1_p1 + solution[0] * world_seg_1.b;
 
         // Create new segments for each segment at the intersection point
         segment new_seg_1 = world_seg_1;
@@ -766,7 +682,7 @@ void PtCdProcessing::visualization() {
   }
 
   for (size_t i = 0; i < world_segments.size(); i++) {
-    for (size_t j = i + 1; j < world_segments.size(); j++) {
+    for (size_t j = 0; j < i; j++) {
       double t1, t2;
       std::tie(t1, t2) = intersection_matrix[i][j];
 

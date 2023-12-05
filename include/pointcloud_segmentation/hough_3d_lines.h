@@ -4,7 +4,7 @@
 
 #include <sensor_msgs/PointCloud2.h>
 #include <pcl_conversions/pcl_conversions.h>
-#include <visualization_msgs/Marker.h>
+#include <pcl/common/pca.h>
 
 #include "vector3d.h"
 #include "pointcloud.h"
@@ -21,7 +21,6 @@ using Eigen::MatrixXf;
 struct segment {
   Eigen::Vector3d a, b;
   double t_min, t_max;
-  std::vector<double> t_values;
   double radius;
   std::vector<Eigen::Vector3d> points;
   int points_size;
@@ -85,6 +84,31 @@ Eigen::Vector3d find_proj(Eigen::Vector3d a, Eigen::Vector3d b, Eigen::Vector3d 
 
 
 /**
+ * @brief Computing the PCA of the segment's points
+ * 
+ * @param drone_seg segment in the drone's frame
+ * @return Eigen::Vector3d Eigenvalues
+ */
+Eigen::Vector3d segPCA(const std::vector<Eigen::Vector3d>& points) {
+
+  // Extract points from drone_seg and create a PCL point cloud
+  pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
+  for (Eigen::Vector3d point : points) {
+    cloud->points.push_back(pcl::PointXYZ(point.x(), point.y(), point.z()));
+  }
+
+  // Performing PCA using PCL
+  pcl::PCA<pcl::PointXYZ> pca;
+  pca.setInputCloud(cloud);
+
+  // Eigenvalues are in descending order
+  Eigen::Vector3d eigenvalues = pca.getEigenValues().cast<double>();
+  
+  return eigenvalues;
+}
+
+
+/**
  * @brief orthogonal least squares fit with libeigen
  * 
  * @param pc point cloud
@@ -138,7 +162,8 @@ double orthogonal_LSQ(const PointCloud &pc, Vector3d* a, Vector3d* b){
  * @return int 0 if successful, 1 otherwise
  */
 int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<segment>& computed_lines, 
-                  double opt_dx, std::vector<double> radius_sizes, int opt_minvotes, int opt_nlines, int VERBOSE){
+                  double opt_dx, std::vector<double> radius_sizes, int opt_minvotes, 
+                  int opt_nlines, double min_pca_coeff, double rad_2_leaf_ratio, int VERBOSE){
 
   PointCloud X;
   Vector3d point;
@@ -280,25 +305,32 @@ int hough3dlines(pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<segment>& compu
     }
     
 
-    // add line to vector
+    // add line to vector if conditions are met
     if (min_radius_diff < opt_dx && max_radius <= closest_radius && max_dist < 2*opt_dx){
 
-      Eigen::Vector3d p1 = a_eigen + t_values.front() *b_eigen;
-      Eigen::Vector3d p2 = a_eigen + t_values.back() *b_eigen;
+      Eigen::Vector3d pca_eigenvalues = segPCA(points);
+      double pca_coeff = pca_eigenvalues[0] / (pca_eigenvalues[0] + pca_eigenvalues[1] + pca_eigenvalues[2]);
 
-      segment l;
-      l.a = a_eigen;
-      l.b = b_eigen;
-      l.t_min = t_values.front();
-      l.t_max = t_values.back();
-      l.t_values = t_values;
-      l.radius = closest_radius;      
-      l.points = points;
-      l.points_size = points.size();
-      l.pca_coeff = 0;
-      l.pca_eigenvalues = Eigen::Vector3d(0,0,0);
+      Eigen::Vector3d test_seg_p1 = t_values.front() * b_eigen + a_eigen;
+      Eigen::Vector3d test_seg_p2 = t_values.back() * b_eigen + a_eigen;
+      double length_seg = (test_seg_p2 - test_seg_p1).norm();
+      int min_nb_points_seg = static_cast<int>(2.0*closest_radius*length_seg/(rad_2_leaf_ratio*2*opt_dx*2*opt_dx));
 
-      computed_lines.push_back(l);
+      if (pca_coeff > min_pca_coeff && points.size() > min_nb_points_seg){
+
+        segment l;
+        l.a = a_eigen;
+        l.b = b_eigen;
+        l.t_min = t_values.front();
+        l.t_max = t_values.back();
+        l.radius = closest_radius;      
+        l.points = points;
+        l.points_size = points.size();
+        l.pca_coeff = pca_coeff;
+        l.pca_eigenvalues = pca_eigenvalues;
+
+        computed_lines.push_back(l);
+      }
     }
     
     X.removePoints(Y);

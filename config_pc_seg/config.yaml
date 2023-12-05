@@ -5,12 +5,12 @@ verbose_level: 0
 floor_trim_height: 0.3
 
 # min_pca_coeff: minimum pca coeff to be considered as a line
-min_pca_coeff: 0.95
+min_pca_coeff: 0.99
 
 # min learning rate coefficient
-min_lr_coeff: 0.05
+min_lr_coeff: 0.01
 
-# rad_2_leaf_ratio: ratio of radius to leaf size
+# rad_2_leaf_ratio: ratio of radius to leaf size to dertermine leaf size
 rad_2_leaf_ratio: 1.5
 
 # opt_minvotes: minimum votes to be considered as a line
