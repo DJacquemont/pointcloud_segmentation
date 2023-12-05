@@ -81,6 +81,8 @@ public:
 
   void segFiltering(std::vector<segment>& drone_segments);
 
+	bool checkConnections(const segment& drone_seg, const segment& world_seg, Eigen::Vector3d& intersection);
+
 	bool checkSimilarity(const segment& drone_seg, const segment& world_seg, segment& target_seg);
 
   void intersectionSearch();
@@ -268,9 +270,21 @@ void PtCdProcessing::processData() {
     segFiltering(drone_segments);
 
     // Identify intersections between segments, and ready the data for output
-    intersectionSearch();
+    // intersectionSearch();
+
+		// Print the matrix of intersections
+    if (verbose_level > INFO){
+      ROS_INFO("Intersection matrix:");
+      for (size_t i = 0; i < intersection_matrix.size(); ++i) {
+        for (size_t j = 0; j < i; ++j) {
+          ROS_INFO("intersection_matrix[%lu][%lu] = (%f, %f)", i, j, 
+                    std::get<0>(intersection_matrix[i][j]), std::get<1>(intersection_matrix[i][j]));
+        }
+      }
+    }
 
     visualization();
+
 
     // Print all the segments
     if (verbose_level > INFO){
@@ -279,17 +293,6 @@ void PtCdProcessing::processData() {
         ROS_INFO("Segment %lu: a = (%f, %f, %f), t_min = %f, t_max = %f", 
                   i, world_segments[i].a.x(), world_segments[i].a.y(), world_segments[i].a.z(), 
                   world_segments[i].t_min, world_segments[i].t_max);
-      }
-    }
-
-    // Print the matrix of intersections
-    if (verbose_level > INFO){
-      ROS_INFO("Intersection matrix:");
-      for (size_t i = 0; i < intersection_matrix.size(); ++i) {
-        for (size_t j = 0; j < i; ++j) {
-          ROS_INFO("intersection_matrix[%lu][%lu] = (%f, %f)", i, j, 
-                    std::get<0>(intersection_matrix[i][j]), std::get<1>(intersection_matrix[i][j]));
-        }
       }
     }
 
@@ -428,8 +431,11 @@ void PtCdProcessing::drone2WorldSeg(std::vector<segment>& drone_segments){
 void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments) {
 
 	std::vector<segment> new_segments;
+	std::vector<size_t> new_indices;
 	std::vector<segment> modified_segments;
 	std::vector<size_t> modified_indices;
+
+	std::vector<segment> new_world_segments = world_segments;
 
 	// If world_segments is empty, directly assign drone_segments to new_segmentSs
 	if (world_segments.empty()) {
@@ -453,18 +459,83 @@ void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments) {
 			if (!found_similarity) {
 				// If no similar segment found, it's a new segment
 				new_segments.push_back(drone_segments[i]);
+				new_indices.push_back(new_world_segments.size() + i);
 			}
 		}
 	}
 
-	// Apply modifications to world_segments
+	// Apply modifications to vector new_world_segments & adding new segments
 	for (size_t i = 0; i < modified_indices.size(); ++i) {
-			world_segments[modified_indices[i]] = modified_segments[i];
+			new_world_segments[modified_indices[i]] = modified_segments[i];
+	}
+	new_world_segments.insert(new_world_segments.end(), new_segments.begin(), new_segments.end());
+
+	// Resize the intersection_matrix to accommodate new segments
+  intersection_matrix.resize(new_world_segments.size());
+  for (auto& row : intersection_matrix) {
+    row.resize(new_world_segments.size(), std::make_tuple(-1.0, -1.0));
+  }
+
+	std::vector<size_t> all_target_indices = modified_indices;
+	all_target_indices.insert(all_target_indices.end(), new_indices.begin(), new_indices.end());
+	for (size_t i = 0; i < intersection_matrix.size(); ++i) {
+		for (size_t j = 0; j < i; ++j) {
+			
+			if (std::find(all_target_indices.begin(), all_target_indices.end(), i) != all_target_indices.end() ||
+					std::find(all_target_indices.begin(), all_target_indices.end(), j) != all_target_indices.end()) {
+
+				Eigen::Vector3d intersection;
+				bool connection = checkConnections(new_world_segments[i], new_world_segments[j], intersection);
+
+				if (connection){
+					intersection_matrix[i][j] = std::make_tuple(new_world_segments[i].t_min + intersection[0], 
+																											new_world_segments[j].t_min + intersection[1]);
+				}
+			}
+		}
 	}
 
-	// Add new segments to world_segments
-	world_segments.insert(world_segments.end(), new_segments.begin(), new_segments.end());
+	world_segments = new_world_segments;
 }
+
+
+
+bool PtCdProcessing::checkConnections(const segment& drone_seg, const segment& world_seg, Eigen::Vector3d& intersection){
+
+	Eigen::Vector3d drone_seg_p1 = drone_seg.t_min * drone_seg.b + drone_seg.a;
+	Eigen::Vector3d world_seg_p1 = world_seg.t_min * world_seg.b + world_seg.a;
+
+	Eigen::Vector3d cross_prod = world_seg.b.cross(drone_seg.b);
+	if (cross_prod.norm() < 1e-2) {
+		// segments are parallel
+		return false;
+	}
+	cross_prod.normalize();
+
+	Eigen::Vector3d RHS = world_seg_p1 - drone_seg_p1;
+	Eigen::Matrix3d LHS;
+	LHS << drone_seg.b, -world_seg.b, cross_prod;
+
+	Eigen::Vector3d sol_intersection = LHS.colPivHouseholderQr().solve(RHS);
+	double dist_intersection = abs(sol_intersection[2]);
+
+	double epsilon = 2*opt_dx + drone_seg.radius + world_seg.radius;
+	// if (((sol_intersection[0] > drone_seg.t_min && sol_intersection[0] < drone_seg.t_max) &&
+	// 		(sol_intersection[1] > world_seg.t_min && sol_intersection[1] < world_seg.t_max)) &&
+	// 		dist_intersection < epsilon) {
+	if ((((sol_intersection[0] + drone_seg.t_min) >= drone_seg.t_min) && ((sol_intersection[0] + drone_seg.t_min) <= drone_seg.t_max)) &&
+          (((sol_intersection[1] + world_seg.t_min) >= world_seg.t_min) && ((sol_intersection[1] + world_seg.t_min) <= world_seg.t_max)) &&
+          dist_intersection < epsilon) {
+
+		intersection = sol_intersection;
+		return true;
+
+	} else {
+		return false;
+	}
+}
+
+
 
 
 bool PtCdProcessing::checkSimilarity(const segment& drone_seg, const segment& world_seg, segment& target_seg){
