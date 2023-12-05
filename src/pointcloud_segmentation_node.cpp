@@ -430,16 +430,13 @@ void PtCdProcessing::drone2WorldSeg(std::vector<segment>& drone_segments){
  */
 void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments) {
 
-	std::vector<segment> new_segments;
 	std::vector<size_t> new_indices;
-	std::vector<segment> modified_segments;
 	std::vector<size_t> modified_indices;
-
 	std::vector<segment> new_world_segments = world_segments;
 
 	// If world_segments is empty, directly assign drone_segments to new_segmentSs
 	if (world_segments.empty()) {
-		new_segments = drone_segments;
+		new_world_segments = drone_segments;
 	} else {
 		// Iterate through drone_segments and world_segments to find new and modified segments
 		for (size_t i = 0; i < drone_segments.size(); ++i) {
@@ -449,7 +446,7 @@ void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments) {
 				bool similarity = checkSimilarity(drone_segments[i], world_segments[j], target_seg);
 
 				if (similarity) {
-					modified_segments.push_back(target_seg);
+					new_world_segments[j] = target_seg;
 					modified_indices.push_back(j);
 					found_similarity = true;
 					break;
@@ -458,17 +455,11 @@ void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments) {
 
 			if (!found_similarity) {
 				// If no similar segment found, it's a new segment
-				new_segments.push_back(drone_segments[i]);
+				new_world_segments.push_back(drone_segments[i]);
 				new_indices.push_back(new_world_segments.size() + i);
 			}
 		}
 	}
-
-	// Apply modifications to vector new_world_segments & adding new segments
-	for (size_t i = 0; i < modified_indices.size(); ++i) {
-			new_world_segments[modified_indices[i]] = modified_segments[i];
-	}
-	new_world_segments.insert(new_world_segments.end(), new_segments.begin(), new_segments.end());
 
 	// Resize the intersection_matrix to accommodate new segments
   intersection_matrix.resize(new_world_segments.size());
@@ -499,7 +490,15 @@ void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments) {
 }
 
 
-
+/**
+ * @brief Function checking if two segments are connected, and if so, returns the intersection point
+ * 
+ * @param drone_seg 
+ * @param world_seg 
+ * @param intersection 
+ * @return true 
+ * @return false 
+ */
 bool PtCdProcessing::checkConnections(const segment& drone_seg, const segment& world_seg, Eigen::Vector3d& intersection){
 
 	Eigen::Vector3d drone_seg_p1 = drone_seg.t_min * drone_seg.b + drone_seg.a;
@@ -520,9 +519,6 @@ bool PtCdProcessing::checkConnections(const segment& drone_seg, const segment& w
 	double dist_intersection = abs(sol_intersection[2]);
 
 	double epsilon = 2*opt_dx + drone_seg.radius + world_seg.radius;
-	// if (((sol_intersection[0] > drone_seg.t_min && sol_intersection[0] < drone_seg.t_max) &&
-	// 		(sol_intersection[1] > world_seg.t_min && sol_intersection[1] < world_seg.t_max)) &&
-	// 		dist_intersection < epsilon) {
 	if ((((sol_intersection[0] + drone_seg.t_min) >= drone_seg.t_min) && ((sol_intersection[0] + drone_seg.t_min) <= drone_seg.t_max)) &&
           (((sol_intersection[1] + world_seg.t_min) >= world_seg.t_min) && ((sol_intersection[1] + world_seg.t_min) <= world_seg.t_max)) &&
           dist_intersection < epsilon) {
@@ -536,8 +532,15 @@ bool PtCdProcessing::checkConnections(const segment& drone_seg, const segment& w
 }
 
 
-
-
+/**
+ * @brief Check if two segments are similar, and if so it returns the fused segment
+ * 
+ * @param drone_seg 
+ * @param world_seg 
+ * @param target_seg 
+ * @return true 
+ * @return false 
+ */
 bool PtCdProcessing::checkSimilarity(const segment& drone_seg, const segment& world_seg, segment& target_seg){
 
 	bool similar = false;
