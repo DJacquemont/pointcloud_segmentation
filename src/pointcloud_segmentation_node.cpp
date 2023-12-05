@@ -81,6 +81,8 @@ public:
 
   void segFiltering(std::vector<segment>& drone_segments);
 
+	bool checkSimilarity(const segment& drone_seg, const segment& world_seg, segment& target_seg);
+
   void intersectionSearch();
 
   void visualization();
@@ -423,92 +425,110 @@ void PtCdProcessing::drone2WorldSeg(std::vector<segment>& drone_segments){
  * 
  * @param drone_segments Segments in the drone's frame
  */
-void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments){
+void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments) {
 
-  std::vector<segment> new_world_segments = world_segments;
+	std::vector<segment> new_segments;
+	std::vector<segment> modified_segments;
+	std::vector<size_t> modified_indices;
 
-  for (const segment& drone_seg : drone_segments) {
+	// If world_segments is empty, directly assign drone_segments to new_segmentSs
+	if (world_segments.empty()) {
+		new_segments = drone_segments;
+	} else {
+		// Iterate through drone_segments and world_segments to find new and modified segments
+		for (size_t i = 0; i < drone_segments.size(); ++i) {
+			bool found_similarity = false;
+			for (size_t j = 0; j < world_segments.size(); ++j) {
+				segment target_seg;
+				bool similarity = checkSimilarity(drone_segments[i], world_segments[j], target_seg);
 
-    bool add_seg = true;
+				if (similarity) {
+					modified_segments.push_back(target_seg);
+					modified_indices.push_back(j);
+					found_similarity = true;
+					break;
+				}
+			}
 
-    Eigen::Vector3d test_seg_p1 = drone_seg.t_min * drone_seg.b + drone_seg.a;
-    Eigen::Vector3d test_seg_p2 = drone_seg.t_max * drone_seg.b + drone_seg.a;
+			if (!found_similarity) {
+				// If no similar segment found, it's a new segment
+				new_segments.push_back(drone_segments[i]);
+			}
+		}
+	}
 
-    for (size_t i = 0; i < world_segments.size(); ++i) {
-      Eigen::Vector3d world_seg_p1 = world_segments[i].t_min * world_segments[i].b + world_segments[i].a;
-      Eigen::Vector3d world_seg_p2 = world_segments[i].t_max * world_segments[i].b + world_segments[i].a;
+	// Apply modifications to world_segments
+	for (size_t i = 0; i < modified_indices.size(); ++i) {
+			world_segments[modified_indices[i]] = modified_segments[i];
+	}
 
-      Eigen::Vector3d test_seg_proj_p1 = find_proj(world_segments[i].a, world_segments[i].b, test_seg_p1);
-      Eigen::Vector3d test_seg_proj_p2 = find_proj(world_segments[i].a, world_segments[i].b, test_seg_p2);
+	// Add new segments to world_segments
+	world_segments.insert(world_segments.end(), new_segments.begin(), new_segments.end());
+}
 
-      double epsilon = drone_seg.radius + world_segments[i].radius + 2*(2*opt_dx);
 
-      if (((test_seg_proj_p1-test_seg_p1).norm() < epsilon) && 
-          ((test_seg_proj_p2-test_seg_p2).norm() < epsilon) && 
-          (drone_seg.radius == world_segments[i].radius)){
+bool PtCdProcessing::checkSimilarity(const segment& drone_seg, const segment& world_seg, segment& target_seg){
 
-        if (verbose_level > NONE){
-          ROS_INFO("Segments are close, checking for similarity");
-        }
+	bool similar = false;
 
-        double lr_coeff = drone_seg.points_size/(world_segments[i].points_size + drone_seg.points_size);
-        lr_coeff = (lr_coeff < min_lr_coeff) ? min_lr_coeff : lr_coeff;
+	Eigen::Vector3d test_seg_p1 = drone_seg.t_min * drone_seg.b + drone_seg.a;
+	Eigen::Vector3d test_seg_p2 = drone_seg.t_max * drone_seg.b + drone_seg.a;
+	Eigen::Vector3d world_seg_p1 = world_seg.t_min * world_seg.b + world_seg.a;
+	Eigen::Vector3d world_seg_p2 = world_seg.t_max * world_seg.b + world_seg.a;
 
-        double learning_rate = (drone_seg.pca_coeff*lr_coeff)/
-                                (world_segments[i].pca_coeff*(1-lr_coeff) + drone_seg.pca_coeff*lr_coeff);
+	Eigen::Vector3d test_seg_proj_p1 = find_proj(world_seg.a, world_seg.b, test_seg_p1);
+	Eigen::Vector3d test_seg_proj_p2 = find_proj(world_seg.a, world_seg.b, test_seg_p2);
 
-        Eigen::Vector3d new_world_seg_a = test_seg_proj_p1 + learning_rate*(test_seg_p1 - test_seg_proj_p1);
-        Eigen::Vector3d new_world_seg_b = (test_seg_proj_p2-test_seg_proj_p1) +
-                                          learning_rate*((test_seg_p2-test_seg_proj_p2)-(test_seg_p1-test_seg_proj_p1));
+	double epsilon = drone_seg.radius + world_seg.radius + 2*(2*opt_dx);
 
-        Eigen::Vector3d test_seg_proj_p1 = find_proj(new_world_seg_a, new_world_seg_b, test_seg_p1);
-        Eigen::Vector3d test_seg_proj_p2 = find_proj(new_world_seg_a, new_world_seg_b, test_seg_p2);
-        Eigen::Vector3d world_seg_proj_p1 = find_proj(new_world_seg_a, new_world_seg_b, world_seg_p1);
-        Eigen::Vector3d world_seg_proj_p2 = find_proj(new_world_seg_a, new_world_seg_b, world_seg_p2);
+	if (((test_seg_proj_p1-test_seg_p1).norm() < epsilon) && 
+		((test_seg_proj_p2-test_seg_p2).norm() < epsilon) && 
+		(drone_seg.radius == world_seg.radius)){
 
-        double test_seg_proj_t1 = (test_seg_proj_p1.x() - new_world_seg_a.x()) / new_world_seg_b.x();
-        double test_seg_proj_t2 = (test_seg_proj_p2.x() - new_world_seg_a.x()) / new_world_seg_b.x();
-        double world_seg_proj_t1 = (world_seg_proj_p1.x() - new_world_seg_a.x()) / new_world_seg_b.x();
-        double world_seg_proj_t2 = (world_seg_proj_p2.x() - new_world_seg_a.x()) / new_world_seg_b.x();
-        
-        if (!((std::min(test_seg_proj_t1, test_seg_proj_t2)>std::max(world_seg_proj_t1, world_seg_proj_t2)) ||
-              (std::max(test_seg_proj_t1, test_seg_proj_t2)<std::min(world_seg_proj_t1, world_seg_proj_t2)))){
+		double lr_coeff = drone_seg.points_size/(world_seg.points_size + drone_seg.points_size);
+		lr_coeff = (lr_coeff < min_lr_coeff) ? min_lr_coeff : lr_coeff;
 
-          if (verbose_level > NONE){
-            ROS_INFO("The 2 segments are similar");
-          }
+		double learning_rate = (drone_seg.pca_coeff*lr_coeff)/
+														(world_seg.pca_coeff*(1-lr_coeff) + drone_seg.pca_coeff*lr_coeff);
 
-          add_seg = false;
+		Eigen::Vector3d new_world_seg_a = test_seg_proj_p1 + learning_rate*(test_seg_p1 - test_seg_proj_p1);
+		Eigen::Vector3d new_world_seg_b = (test_seg_proj_p2-test_seg_proj_p1) +
+																				learning_rate*((test_seg_p2-test_seg_proj_p2)-(test_seg_p1-test_seg_proj_p1));
 
-          segment modif_seg = world_segments[i];
+		Eigen::Vector3d test_seg_proj_p1 = find_proj(new_world_seg_a, new_world_seg_b, test_seg_p1);
+		Eigen::Vector3d test_seg_proj_p2 = find_proj(new_world_seg_a, new_world_seg_b, test_seg_p2);
+		Eigen::Vector3d world_seg_proj_p1 = find_proj(new_world_seg_a, new_world_seg_b, world_seg_p1);
+		Eigen::Vector3d world_seg_proj_p2 = find_proj(new_world_seg_a, new_world_seg_b, world_seg_p2);
 
-          modif_seg.a = new_world_seg_a;
-          modif_seg.b = new_world_seg_b;
+		double test_seg_proj_t1 = (test_seg_proj_p1.x() - new_world_seg_a.x()) / new_world_seg_b.x();
+		double test_seg_proj_t2 = (test_seg_proj_p2.x() - new_world_seg_a.x()) / new_world_seg_b.x();
+		double world_seg_proj_t1 = (world_seg_proj_p1.x() - new_world_seg_a.x()) / new_world_seg_b.x();
+		double world_seg_proj_t2 = (world_seg_proj_p2.x() - new_world_seg_a.x()) / new_world_seg_b.x();
 
-          std::vector<double> list_t = {test_seg_proj_t1, test_seg_proj_t2, world_seg_proj_t1, world_seg_proj_t2};
-          modif_seg.t_max = *std::max_element(list_t.begin(), list_t.end());
-          modif_seg.t_min = *std::min_element(list_t.begin(), list_t.end());
-          modif_seg.radius = drone_seg.radius;
-          modif_seg.points_size = modif_seg.points_size + drone_seg.points_size;
-          modif_seg.points.insert(modif_seg.points.end(), drone_seg.points.begin(), drone_seg.points.end());
-          modif_seg.pca_coeff = modif_seg.pca_coeff*(1-lr_coeff) + drone_seg.pca_coeff*lr_coeff;
-          modif_seg.pca_eigenvalues = modif_seg.pca_eigenvalues*(1-lr_coeff) + drone_seg.pca_eigenvalues*lr_coeff;
+		if (!((std::min(test_seg_proj_t1, test_seg_proj_t2)>std::max(world_seg_proj_t1, world_seg_proj_t2)) ||
+						(std::max(test_seg_proj_t1, test_seg_proj_t2)<std::min(world_seg_proj_t1, world_seg_proj_t2)))){
 
-          world_segments[i] = modif_seg;
-        }
-      } else if (verbose_level > NONE){
-        ROS_INFO("Segments are not close");
-      }
-    }
+			std::vector<double> list_t = {test_seg_proj_t1, test_seg_proj_t2, world_seg_proj_t1, world_seg_proj_t2};
 
-    if (add_seg) {
+			target_seg.a = new_world_seg_a;
+			target_seg.b = new_world_seg_b;            
+			target_seg.t_max = *std::max_element(list_t.begin(), list_t.end());
+			target_seg.t_min = *std::min_element(list_t.begin(), list_t.end());
+			target_seg.radius = drone_seg.radius;
+			target_seg.points_size = target_seg.points_size + drone_seg.points_size;
+			target_seg.points.insert(target_seg.points.end(), drone_seg.points.begin(), drone_seg.points.end());
+			target_seg.pca_coeff = target_seg.pca_coeff*(1-lr_coeff) + drone_seg.pca_coeff*lr_coeff;
+			target_seg.pca_eigenvalues = target_seg.pca_eigenvalues*(1-lr_coeff) + drone_seg.pca_eigenvalues*lr_coeff;
 
-      segment added = drone_seg; 
-      added.pca_coeff = drone_seg.pca_coeff;
-      added.pca_eigenvalues = drone_seg.pca_eigenvalues;
-      world_segments.push_back(added);
-    }
-  }
+			similar = true;
+		}
+	}
+
+	if (!similar){
+		target_seg = drone_seg;
+	}
+
+	return similar;
 }
 
 
@@ -528,7 +548,7 @@ void PtCdProcessing::intersectionSearch(){
   size_t nb_segments = world_segments.size();
   intersection_matrix.resize(nb_segments);
   for (size_t i = 0; i < nb_segments; ++i) {
-      intersection_matrix[i].resize(nb_segments, std::make_tuple(-1.0, -1.0));
+    intersection_matrix[i].resize(nb_segments, std::make_tuple(-1.0, -1.0));
   }
 
   for (size_t i = 0; i < world_segments.size(); ++i) {
