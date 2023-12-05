@@ -219,9 +219,8 @@ void PtCdProcessing::setParams() {
   ROS_INFO("  min_lr_coeff: %f", min_lr_coeff);
   ROS_INFO("  opt_minvotes: %d", opt_minvotes);
   ROS_INFO("  opt_nlines: %d", opt_nlines);
-  ROS_INFO("  radius_sizes: %f, %f, %f, %f, %f, %f, %f", 
-            radius_sizes[0], radius_sizes[1], radius_sizes[2], radius_sizes[3], 
-            radius_sizes[4], radius_sizes[5], radius_sizes[6]);
+  ROS_INFO("  radius_sizes: %f, %f, %f", 
+            radius_sizes[0], radius_sizes[1], radius_sizes[2]);
   ROS_INFO("  leaf_size: %f", leaf_size);
   ROS_INFO("  opt_dx: %f", opt_dx);
 }
@@ -281,10 +280,20 @@ void PtCdProcessing::processData() {
     if (verbose_level > INFO){
       ROS_INFO("Number of segments: %lu", world_segments.size());
       for (size_t i = 0; i < world_segments.size(); ++i) {
-        ROS_INFO("Segment %lu: a = (%f, %f, %f), b = (%f, %f, %f), t_min = %f, t_max = %f", 
+        ROS_INFO("Segment %lu: a = (%f, %f, %f), t_min = %f, t_max = %f", 
                   i, world_segments[i].a.x(), world_segments[i].a.y(), world_segments[i].a.z(), 
-                  world_segments[i].b.x(), world_segments[i].b.y(), world_segments[i].b.z(), 
                   world_segments[i].t_min, world_segments[i].t_max);
+      }
+    }
+
+    // Print the matrix of intersections
+    if (verbose_level > INFO){
+      ROS_INFO("Intersection matrix:");
+      for (size_t i = 0; i < intersection_matrix.size(); ++i) {
+        for (size_t j = 0; j < intersection_matrix.size(); ++j) {
+          ROS_INFO("intersection_matrix[%lu][%lu] = (%f, %f)", i, j, 
+                    std::get<0>(intersection_matrix[i][j]), std::get<1>(intersection_matrix[i][j]));
+        }
       }
     }
 
@@ -573,6 +582,38 @@ void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments){
           modif_seg.a = new_world_seg_a;
           modif_seg.b = new_world_seg_b;
 
+          
+
+
+          // modifer la colonne intersection de world line studied
+          for (size_t j = 0; j < intersection_matrix.size(); ++j) {
+            double t1, t2;
+            std::tie(t1, t2) = intersection_matrix[i][j];
+            if (t1 != -1.0 && t2 != -1.0) {
+              assert(((t1 == -1) && (t2 != -1)) || ((t1 != -1) && (t2 == -1)));
+
+              if (i > j){
+                double old_t_i = t1;
+                Eigen::Vector3d old_p_i = old_t_i * world_segments[i].b + world_segments[i].a;
+                Eigen::Vector3d new_p_i = find_proj(new_world_seg_a, new_world_seg_b, old_p_i);
+                double new_t = (new_p_i.x() - new_world_seg_a.x()) / new_world_seg_b.x();
+
+
+
+
+                intersection_matrix[i][j] = std::make_tuple(new_t, std::get<1>(intersection_matrix[i][j]));
+              } else if (i < j){
+                double old_t = t2;
+                Eigen::Vector3d old_p = old_t * world_segments[j].b + world_segments[j].a;
+                Eigen::Vector3d new_p = find_proj(new_world_seg_a, new_world_seg_b, old_p);
+                double new_t = (new_p.x() - new_world_seg_a.x()) / new_world_seg_b.x();
+                intersection_matrix[j][i] = std::make_tuple(std::get<0>(intersection_matrix[i][j]), new_t);
+              }
+            }
+          }
+
+          
+
           // cherche a savoir si t_min ou _max est a une intersection. Si c'est le cas alors le nouveau t ne pourra pas depasser la valeur de l'intersection
           // regarder colonne intersection de world line studied, et en deduire les t min et max
           // si le t min ou max est present, alors verifier que l'intersection est bien la bonne enregardant le world segment correspondant
@@ -745,12 +786,18 @@ void PtCdProcessing::checkConnections(const int& idx_check_seg){
           world_segments.push_back(new_seg);
         }
 
-        intersection_matrix[idx_check_seg+i][intersection.seg_idx] = std::make_tuple(
+        assert(idx_check_seg+i == intersection.seg_idx);
+        if (idx_check_seg+i > intersection.seg_idx){
+          intersection_matrix[idx_check_seg+i][intersection.seg_idx] = std::make_tuple(
           original_seg.t_min + intersection.solution[0], 
           world_segments[intersection.seg_idx].t_min + intersection.solution[1]);
-        intersection_matrix[intersection.seg_idx][idx_check_seg+i] = std::make_tuple(
+        }
+        else {
+          intersection_matrix[intersection.seg_idx][idx_check_seg+i] = std::make_tuple(
           world_segments[intersection.seg_idx].t_min + intersection.solution[1], 
           original_seg.t_min + intersection.solution[0]);
+        }
+
       }
     }
   }
@@ -1058,7 +1105,7 @@ void PtCdProcessing::visualization() {
   }
 
   for (size_t i = 0; i < world_segments.size(); i++) {
-    for (size_t j = i + 1; j < world_segments.size(); j++) {
+    for (size_t j = 0; j < i; j++) {
       double t1, t2;
       std::tie(t1, t2) = intersection_matrix[i][j];
 
