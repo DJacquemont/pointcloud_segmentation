@@ -11,11 +11,11 @@ The core of this project is to adapt and integrate the [`hough-3d-lines`](https:
 ### Prerequisites
 - Ubuntu 20.04
 - Webots 2023a
-- C++ Compiler with C++14 support
+- C++ Compiler with C++17 support
 - [auto_pilot](https://gitlab.epfl.ch/waelti/auto_pilot) package (drone and sensors simulation)
 - ROS Noetic
-- Eigen3 library
-- PCL library
+- Eigen3
+- PCL v1.10
 
 This repo includes the following submodules:
 - [hough-3d-lines](https://github.com/LucasWaelti/hough-3d-lines) (cloned with ssh)
@@ -26,6 +26,20 @@ git submodule update --init --recursive
 ```
 
 ### Getting started
+
+#### Configuration file
+
+The YAML file `config.yaml` sets the nodes parameters:
+- verbose_level
+- path_to_output
+- floor_trim_height
+- min_pca_coeff
+- min_lr_coeff
+- rad_2_leaf_ratio
+- opt_minvotes
+- granularity
+- opt_nlines
+- radius_sizes
 
 #### Simulation
 
@@ -45,6 +59,11 @@ To launch all the packages in the simulation world `flying_arena_ros_obs.wbt`
 ```bash
 roslaunch pointcloud_segmentation all.launch trajectory:=eight
 ```
+
+To launch all the packages in the simulation world `flying_arena_ros_obs_tests.wbt`
+```bash
+roslaunch pointcloud_segmentation all.launch waypoints:=wp_tests.csv
+```
 #### Standalone
 
 To only run the pointcloud segmentation node 
@@ -56,6 +75,12 @@ To only run the pointcloud TF transform broadcaster
 ```bash
 rosrun pointcloud_segmentation pointcloud_tfbr_node
 ```
+
+#### Output
+Three output csv files are created at the `path_to_output` path specified in the configuration file `config.yaml`.
+- `intersection.csv`
+- `segments.csv`
+- `processing_time.csv`
 
 
 ## Implementation Details
