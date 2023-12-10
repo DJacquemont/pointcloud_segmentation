@@ -71,6 +71,7 @@ public:
 
     saveIntersectionsToFile(path_to_output + "/intersections.txt");
     saveSegmentsToFile(path_to_output + "/segments.txt");
+    saveProcessingTimeToFile(path_to_output + "/processing_time.txt");
   }
 
   void setParams();
@@ -96,9 +97,11 @@ public:
 
   void clearMarkers();
 
-  void saveIntersectionsToFile(const std::string& filename);
+  void saveIntersectionsToFile(const std::string& filepath);
 
-  void saveSegmentsToFile(const std::string& filename);
+  void saveSegmentsToFile(const std::string& filepath);
+
+  void saveProcessingTimeToFile(const std::string& filepath);
 
 private:
   ros::NodeHandle node;
@@ -139,6 +142,9 @@ private:
   double opt_dx;
   int granularity;
   double rad_2_leaf_ratio;
+
+  // storing time for the callback
+  std::vector<double> callback_time;
 };
 
 
@@ -258,7 +264,7 @@ void PtCdProcessing::processData() {
 
     lock.unlock();
 
-    auto callStart = high_resolution_clock::now();
+    auto processing_start = high_resolution_clock::now();
 
     // Find the closest pose in time to the point cloud's timestamp
     if (closestDronePose(latestMsgCopy.header.stamp)){
@@ -309,10 +315,12 @@ void PtCdProcessing::processData() {
       }
     }
 
-    auto callEnd = high_resolution_clock::now();
+    auto processing_end = high_resolution_clock::now();
+    int processing_duration = duration_cast<microseconds>(processing_end - processing_start).count();
+    callback_time.push_back(processing_duration);
+
     if (verbose_level > NONE){
-      ROS_INFO("Callback execution time: %ld us",
-                duration_cast<microseconds>(callEnd - callStart).count());
+      ROS_INFO("Callback execution time: %d us", processing_duration);
     }
   }
 }
@@ -796,10 +804,15 @@ void PtCdProcessing::clearMarkers() {
 }
 
 
-void PtCdProcessing::saveIntersectionsToFile(const std::string& filename) {
-  std::ofstream file(filename);
+/**
+ * @brief Saving the intersections to a file
+ * 
+ * @param filepath 
+ */
+void PtCdProcessing::saveIntersectionsToFile(const std::string& filepath) {
+  std::ofstream file(filepath);
   if (!file.is_open()) {
-    std::cout << "Failed to open file: " << filename << std::endl;
+    std::cout << "Failed to open file: " << filepath << std::endl;
     return;
   }
 
@@ -817,19 +830,47 @@ void PtCdProcessing::saveIntersectionsToFile(const std::string& filename) {
   file.close();
 }
 
-void PtCdProcessing::saveSegmentsToFile(const std::string& filename) {
-  std::ofstream file(filename);
+/**
+ * @brief Saving the segments to a file
+ * 
+ * @param filepath 
+ */
+void PtCdProcessing::saveSegmentsToFile(const std::string& filepath) {
+  std::ofstream file(filepath);
   if (!file.is_open()) {
-    std::cout << "Failed to open file: " << filename << std::endl;
+    std::cout << "Failed to open file: " << filepath << std::endl;
     return;
   }
 
+      // Write headers
+  file << "segment,a_x,a_y,a_z,b_x,b_y,b_z,t_min,t_max" << std::endl;
+  
   for (size_t i = 0; i < world_segments.size(); ++i) {
-    const segment& seg = world_segments[i];
-    file << "Segment " << i << ": start = (" << seg.a.x() << ", " 
-         << seg.a.y() << ", " << seg.a.z() << "), direction = (" 
-         << seg.b.x() << ", " << seg.b.y() << ", " << seg.b.z() 
-         << "), t_min = " << seg.t_min << ", t_max = " << seg.t_max << "\n";
+      const segment& seg = world_segments[i];
+      file << i << ",";
+      file << seg.a.x() << "," << seg.a.y() << "," << seg.a.z() << ",";
+      file << seg.b.x() << "," << seg.b.y() << "," << seg.b.z() << ",";
+      file << seg.t_min << "," << seg.t_max << std::endl;
+  }
+
+  file.close();
+}
+
+
+/**
+ * @brief Saving the processing time to a file
+ * 
+ * @param filepath 
+ */
+void PtCdProcessing::saveProcessingTimeToFile(const std::string& filepath) {
+  std::ofstream file(filepath);
+  if (!file.is_open()) {
+    std::cout << "Failed to open file: " << filepath << std::endl;
+    return;
+  }
+
+  for (size_t i = 0; i < callback_time.size(); ++i) {
+    file << callback_time[i] << "\n";
   }
 
   file.close();

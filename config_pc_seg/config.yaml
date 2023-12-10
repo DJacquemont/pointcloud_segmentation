@@ -1,5 +1,5 @@
 # vebose_level: NONE - 0, INFO - 1, DEBUG - 2
-verbose_level: 2
+verbose_level: 0
 
 # path_to_output: path to the processed output data (segments and intersections)
 path_to_output: /home/djacquem/WS/src/pointcloud_segmentation/output_data
