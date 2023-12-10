@@ -1,3 +1,5 @@
+#include <iostream>
+#include <filesystem>
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <pcl_conversions/pcl_conversions.h>
@@ -17,6 +19,7 @@
 #include <chrono>
 
 #include "hough_3d_lines.h"
+#include <assert.h>
 
 using namespace std::chrono;
 
@@ -58,12 +61,16 @@ public:
     hough_pc_pub = node.advertise<sensor_msgs::PointCloud2>("hough_pointcloud", 0);
   }
 
-  ~PtCdProcessing() {
+  ~PtCdProcessing() 
+  {
     running = false;
     dataCondition.notify_one();
     if (processingThread.joinable()) {
         processingThread.join();
     }
+
+    saveIntersectionsToFile(path_to_output + "/intersections.txt");
+    saveSegmentsToFile(path_to_output + "/segments.txt");
   }
 
   void setParams();
@@ -85,11 +92,13 @@ public:
 
 	bool checkSimilarity(const segment& drone_seg, const segment& world_seg, segment& target_seg);
 
-  void intersectionSearch();
-
   void visualization();
 
   void clearMarkers();
+
+  void saveIntersectionsToFile(const std::string& filename);
+
+  void saveSegmentsToFile(const std::string& filename);
 
 private:
   ros::NodeHandle node;
@@ -119,6 +128,7 @@ private:
 
   // Parameters
   enum verbose verbose_level;
+  std::string path_to_output;
   double floor_trim_height;
   double min_pca_coeff;
   double min_lr_coeff;
@@ -160,6 +170,11 @@ void PtCdProcessing::setParams() {
     verbose_level_int = 0;
   }
   verbose_level = static_cast<verbose>(verbose_level_int);
+
+  if (!this->node.getParam("/path_to_output", path_to_output)) {
+    ROS_ERROR("Failed to get param 'path_to_output'");
+  }
+  ROS_ASSERT(std::filesystem::exists(path_to_output));
 
   if (!this->node.getParam("/floor_trim_height", floor_trim_height)) {
     ROS_ERROR("Failed to get param 'floor_trim_height'");
@@ -212,6 +227,7 @@ void PtCdProcessing::setParams() {
 
   ROS_INFO("Configuration:");
   ROS_INFO("  verbose_level: %d", verbose_level);
+  ROS_INFO("  path_to_output: %s", path_to_output.c_str());
   ROS_INFO("  floor_trim_height: %f", floor_trim_height);
   ROS_INFO("  min_pca_coeff: %f", min_pca_coeff);
   ROS_INFO("  min_lr_coeff: %f", min_lr_coeff);
@@ -232,7 +248,7 @@ void PtCdProcessing::setParams() {
  * @return ** void
  */
 void PtCdProcessing::processData() {
-  while (running) {
+  while (ros::ok() && running) {
     std::unique_lock<std::mutex> lock(dataMutex);
     dataCondition.wait(lock, [this] { return sharedData.newDataAvailable || !running; });
 
@@ -268,9 +284,6 @@ void PtCdProcessing::processData() {
 
     // Filter the segments that already exist in the world_segments
     segFiltering(drone_segments);
-
-    // Identify intersections between segments, and ready the data for output
-    // intersectionSearch();
 
 		// Print the matrix of intersections
     if (verbose_level > INFO){
@@ -433,6 +446,7 @@ void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments) {
 	std::vector<size_t> new_indices;
 	std::vector<size_t> modified_indices;
 	std::vector<segment> new_world_segments = world_segments;
+  std::vector<std::vector<std::tuple<double, double>>> new_intersection_matrix = intersection_matrix;
 
 	// If world_segments is empty, directly assign drone_segments to new_segmentSs
 	if (world_segments.empty()) {
@@ -461,15 +475,15 @@ void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments) {
 		}
 	}
 
-	// Resize the intersection_matrix to accommodate new segments
-  intersection_matrix.resize(new_world_segments.size());
-  for (auto& row : intersection_matrix) {
+	// Resize the new_intersection_matrix to accommodate new segments
+  new_intersection_matrix.resize(new_world_segments.size());
+  for (auto& row : new_intersection_matrix) {
     row.resize(new_world_segments.size(), std::make_tuple(-1.0, -1.0));
   }
-
+  
 	std::vector<size_t> all_target_indices = modified_indices;
 	all_target_indices.insert(all_target_indices.end(), new_indices.begin(), new_indices.end());
-	for (size_t i = 0; i < intersection_matrix.size(); ++i) {
+	for (size_t i = 0; i < new_world_segments.size(); ++i) {
 		for (size_t j = 0; j < i; ++j) {
 			
 			if (std::find(all_target_indices.begin(), all_target_indices.end(), i) != all_target_indices.end() ||
@@ -479,7 +493,7 @@ void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments) {
 				bool connection = checkConnections(new_world_segments[i], new_world_segments[j], intersection);
 
 				if (connection){
-					intersection_matrix[i][j] = std::make_tuple(new_world_segments[i].t_min + intersection[0], 
+					new_intersection_matrix[i][j] = std::make_tuple(new_world_segments[i].t_min + intersection[0], 
 																											new_world_segments[j].t_min + intersection[1]);
 				}
 			}
@@ -487,6 +501,7 @@ void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments) {
 	}
 
 	world_segments = new_world_segments;
+  intersection_matrix = new_intersection_matrix;
 }
 
 
@@ -605,86 +620,6 @@ bool PtCdProcessing::checkSimilarity(const segment& drone_seg, const segment& wo
 	return similar;
 }
 
-
-/**
- * @brief Search for intersections between segments, separates segments with intersections, and ready the data for 
- * output
- * 
- * @return ** void
- */
-void PtCdProcessing::intersectionSearch(){
-
-  // initiate variables
-  struct_segm.clear();
-  std::vector<std::vector<std::tuple<double, double>>> empty_intersection_matrix;
-  intersection_matrix.swap(empty_intersection_matrix);
-
-  size_t nb_segments = world_segments.size();
-  intersection_matrix.resize(nb_segments);
-  for (size_t i = 0; i < nb_segments; ++i) {
-    intersection_matrix[i].resize(nb_segments, std::make_tuple(-1.0, -1.0));
-  }
-
-  for (size_t i = 0; i < world_segments.size(); ++i) {
-    const segment world_seg_1 = world_segments[i];
-    bool hasIntersection = false;
-
-    for (size_t j = 0; j < i; ++j) {
-      const segment world_seg_2 = world_segments[j];
-
-      double epsilon = 2*opt_dx + world_seg_1.radius + world_seg_2.radius;
-
-      Eigen::Vector3d world_seg_1_p1 = world_seg_1.t_min * world_seg_1.b + world_seg_1.a;
-      Eigen::Vector3d world_seg_2_p1 = world_seg_2.t_min * world_seg_2.b + world_seg_2.a;
-
-      Eigen::Vector3d cross_prod = world_seg_2.b.cross(world_seg_1.b);
-      if (cross_prod.norm() < 1e-4) {
-        if (verbose_level > INFO)
-          ROS_WARN("Segments are parallel, skipping intersection check");
-        continue;
-      }
-      cross_prod.normalize();
-
-      Eigen::Vector3d RHS = world_seg_2_p1 - world_seg_1_p1;
-      Eigen::Matrix3d LHS;
-      LHS << world_seg_1.b, -world_seg_2.b, cross_prod;
-
-      Eigen::Vector3d solution = LHS.colPivHouseholderQr().solve(RHS);
-      
-      double dist_intersection = abs(solution[2]);
-
-      if ((((solution[0] + world_seg_1.t_min) >= world_seg_1.t_min) && ((solution[0] + world_seg_1.t_min) <= world_seg_1.t_max)) &&
-          (((solution[1] + world_seg_2.t_min) >= world_seg_2.t_min) && ((solution[1] + world_seg_2.t_min) <= world_seg_2.t_max)) &&
-          dist_intersection < epsilon) {
-
-        // Create new segments for each segment at the intersection point
-        segment new_seg_1 = world_seg_1;
-        new_seg_1.t_max = solution[0];
-        struct_segm.push_back(new_seg_1);
-
-        segment new_seg_1_part2 = world_seg_1;
-        new_seg_1_part2.t_min = solution[0];
-        struct_segm.push_back(new_seg_1_part2);
-
-        segment new_seg_2 = world_seg_2;
-        new_seg_2.t_max = solution[1];
-        struct_segm.push_back(new_seg_2);
-
-        segment new_seg_2_part2 = world_seg_2;
-        new_seg_2_part2.t_min = solution[1];
-        struct_segm.push_back(new_seg_2_part2);
-
-        intersection_matrix[i][j] = std::make_tuple(world_seg_1.t_min + solution[0], world_seg_2.t_min + solution[1]);
-
-        hasIntersection = true;
-      }
-    }
-    if (!hasIntersection) {
-    // If no intersection is found, add the original segment to the output
-      struct_segm.push_back(world_seg_1);
-    }
-  }
-}
 
 
 /**
@@ -858,6 +793,46 @@ void PtCdProcessing::clearMarkers() {
   visualization_msgs::MarkerArray marker_array;
   marker_array.markers.push_back(clear_marker);
   marker_pub.publish(marker_array);
+}
+
+
+void PtCdProcessing::saveIntersectionsToFile(const std::string& filename) {
+  std::ofstream file(filename);
+  if (!file.is_open()) {
+    std::cout << "Failed to open file: " << filename << std::endl;
+    return;
+  }
+
+  for (size_t i = 0; i < intersection_matrix.size(); ++i) {
+    for (size_t j = 0; j < i; ++j) {
+      double t1, t2;
+      std::tie(t1, t2) = intersection_matrix[i][j];
+      if (t1 != -1.0 && t2 != -1.0) {
+        file << "Intersection between segments " << i << " and " << j 
+             << ": (" << t1 << ", " << t2 << ")\n";
+      }
+    }
+  }
+
+  file.close();
+}
+
+void PtCdProcessing::saveSegmentsToFile(const std::string& filename) {
+  std::ofstream file(filename);
+  if (!file.is_open()) {
+    std::cout << "Failed to open file: " << filename << std::endl;
+    return;
+  }
+
+  for (size_t i = 0; i < world_segments.size(); ++i) {
+    const segment& seg = world_segments[i];
+    file << "Segment " << i << ": start = (" << seg.a.x() << ", " 
+         << seg.a.y() << ", " << seg.a.z() << "), direction = (" 
+         << seg.b.x() << ", " << seg.b.y() << ", " << seg.b.z() 
+         << "), t_min = " << seg.t_min << ", t_max = " << seg.t_max << "\n";
+  }
+
+  file.close();
 }
 
 
