@@ -69,9 +69,9 @@ public:
         processingThread.join();
     }
 
-    saveIntersectionsToFile(path_to_output + "/intersections.txt");
-    saveSegmentsToFile(path_to_output + "/segments.txt");
-    saveProcessingTimeToFile(path_to_output + "/processing_time.txt");
+    saveIntersectionsToFile(path_to_output + "/intersections.csv");
+    saveSegmentsToFile(path_to_output + "/segments.csv");
+    saveProcessingTimeToFile(path_to_output + "/processing_time.csv");
   }
 
   void setParams();
@@ -816,13 +816,15 @@ void PtCdProcessing::saveIntersectionsToFile(const std::string& filepath) {
     return;
   }
 
+  // Write headers
+  file << "seg1,t1,seg2,t2" << std::endl;
+
   for (size_t i = 0; i < intersection_matrix.size(); ++i) {
     for (size_t j = 0; j < i; ++j) {
       double t1, t2;
       std::tie(t1, t2) = intersection_matrix[i][j];
       if (t1 != -1.0 && t2 != -1.0) {
-        file << "Intersection between segments " << i << " and " << j 
-             << ": (" << t1 << ", " << t2 << ")\n";
+        file << i << "," << t1 << "," << j << "," << t2 << std::endl;
       }
     }
   }
@@ -842,7 +844,7 @@ void PtCdProcessing::saveSegmentsToFile(const std::string& filepath) {
     return;
   }
 
-      // Write headers
+  // Write headers
   file << "segment,a_x,a_y,a_z,b_x,b_y,b_z,t_min,t_max" << std::endl;
   
   for (size_t i = 0; i < world_segments.size(); ++i) {
@@ -869,8 +871,9 @@ void PtCdProcessing::saveProcessingTimeToFile(const std::string& filepath) {
     return;
   }
 
+  file << "processing_time" << std::endl;
   for (size_t i = 0; i < callback_time.size(); ++i) {
-    file << callback_time[i] << "\n";
+    file << callback_time[i] << std::endl;
   }
 
   file.close();

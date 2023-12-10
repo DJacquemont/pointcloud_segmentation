@@ -41,26 +41,41 @@ def read_segments_from_file(data_file_path):
         })
     return segments_proc
 
-def find_seg_out():
+def read_intersections_from_file(data_file_path):
+    """Read intersection information from a file."""
+    df = pd.read_csv(data_file_path, header=0)
+    intersections_proc = []
+    for _, row in df.iterrows():
+        intersections_proc.append({
+            'seg1': row['seg1'],
+            't1': row['t1'],
+            'seg2': row['seg2'],
+            't2': row['t2']
+        })
+    return intersections_proc
+
+def find_output_file(filename):
     """Find the path to the processing time data file."""
     pointcloud_segmentation_dir = os.path.dirname(os.path.dirname(__file__))
     yaml_file_path = os.path.join(pointcloud_segmentation_dir, 'config_pc_seg', 'config.yaml')
     with open(yaml_file_path, 'r') as file:
         config = yaml.safe_load(file)
     path_to_output = config.get('path_to_output', None)
-    data_file_path = os.path.join(path_to_output, 'segments.txt')
+    data_file_path = os.path.join(path_to_output, filename)
     return data_file_path
 
-def are_directions_similar(b1, b2, angle_threshold=0.1):
+def check_similar_directions(b1, b2, angle_threshold=0.1):
     """Check if two direction vectors are nearly parallel within a given threshold."""
     b1_normalized = b1 / np.linalg.norm(b1)
     b2_normalized = b2 / np.linalg.norm(b2)
     dot_product = np.dot(b1_normalized, b2_normalized)
     angle = np.arccos(dot_product)
-    if abs(angle) < angle_threshold or abs(angle - np.pi) < angle_threshold:
-        return True
+    if abs(angle) < angle_threshold:
+        return True, abs(angle)
+    elif abs(angle - np.pi) < angle_threshold:
+        return True, abs(angle - np.pi)
     else:
-        return False
+        return False, angle
 
 def shortest_distance_between_lines(seg1, seg2):
     """Calculate the distance between the lines middle points"""
@@ -76,11 +91,11 @@ def get_similar_segments(segments_webots, segments_proc):
     similar_lines = []
     for i in range(len(segments_webots)):
         for j in range(len(segments_proc)):
-            if are_directions_similar(segments_webots[i]['b'], segments_proc[j]['b']):
-                print(f"Lines {i} and {j} have similar directions")
+            similar, angle = check_similar_directions(segments_webots[i]['b'], segments_proc[j]['b'])
+            if similar:
                 distance = shortest_distance_between_lines(segments_webots[i], segments_proc[j])
                 if distance < distance_threshold:
-                    similar_lines.append((i, j, distance))
+                    similar_lines.append((i, j, distance, angle, angle * distance))
     return similar_lines
 
 def plot_segments(segments_webots, segments_proc, similar_segments):
@@ -108,7 +123,7 @@ def plot_segments(segments_webots, segments_proc, similar_segments):
     color_index = 0
 
     # Highlight similar segments with different colors
-    for i, j, _ in similar_segments:
+    for i, j, _, _, _ in similar_segments:
         current_color = colors[color_index % len(colors)]
         draw_segment(segments_webots[i], color=current_color)
         draw_segment(segments_proc[j], color=current_color, linestyle=':')
@@ -116,6 +131,40 @@ def plot_segments(segments_webots, segments_proc, similar_segments):
         # Move to the next color for the next pair
         color_index += 1
 
+    # Set labels for the axes
+    ax.set_xlabel('X axis [m]')
+    ax.set_ylabel('Y axis [m]')
+    ax.set_zlabel('Z axis [m]')
+    plt.title('Webots vs Processed Segments')
+    plt.show()
+
+def plot_distance_vs_angle(similar_segments):
+    """Plot a scatter plot of the distance vs angle for similar segments."""
+    distances = [seg[2] for seg in similar_segments]
+    angles = [seg[3] for seg in similar_segments]
+
+    plt.figure()
+    for i, (distance, angle) in enumerate(zip(distances, angles)):
+        plt.scatter(distance, angle, color='red')
+        plt.text(distance, angle, str(i), color='blue', fontsize=8)
+
+    plt.xlabel('Distance Error [m]')
+    plt.ylabel('Angle Error [rad]')
+    plt.xlim([0, 0.55])
+    plt.ylim([0, 0.12])
+    plt.title('Distance vs. Angle Error for Similar Segments')
+    plt.grid(True)
+    plt.show()
+
+def plot_error_coefficients(similar_segments):
+    """Plot a histogram of the error coefficients for similar segments."""
+    error_coefficients = [seg[4] for seg in similar_segments]
+    plt.figure()
+    plt.boxplot(error_coefficients)
+    plt.xlabel('Error Coefficient')
+    plt.ylabel('Error [rad*m]')
+    plt.title('Error Coefficients for Similar Segments')
+    plt.grid(True)
     plt.show()
 
 def main():
@@ -126,17 +175,22 @@ def main():
     segments_webots = get_segments_from_webots(supervisor)
 
     # Read segments from the file
-    segments_proc = read_segments_from_file(find_seg_out())
+    segments_proc = read_segments_from_file(find_output_file('segments.csv'))
+
+    # Read intersections from the file
+    intersections_proc = read_intersections_from_file(find_output_file('intersections.csv'))
 
     # Find similar segments
     similar_segments = get_similar_segments(segments_webots, segments_proc)
 
-    # Print pairs of similar lines
-    for pair in similar_segments:
-        print(f"Lines {pair[0]} and {pair[1]} are similar with a distance of {pair[2]:.2f}")
-
     # Plot segments
     plot_segments(segments_webots, segments_proc, similar_segments)
+
+    # Plot distance vs angle scatter plot
+    plot_distance_vs_angle(similar_segments)
+
+    # Plot error coefficients
+    plot_error_coefficients(similar_segments)
 
     plt.show()
 
