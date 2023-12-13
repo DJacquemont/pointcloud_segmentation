@@ -13,10 +13,10 @@ min_pca_coeff: 0.99
 # min learning rate coefficient
 min_lr_coeff: 0.01
 
-# rad_2_leaf_ratio: ratio of radius to leaf size to dertermine leaf size
+# rad_2_leaf_ratio: ratio of radius to leaf size to determine leaf size
 rad_2_leaf_ratio: 1.5
 
-# opt_minvotes: minimum votes to be considered as a line
+# opt_minvotes: minimum number of votes to be considered a line
 opt_minvotes: 12
 
 # granularity: granularity of the search (Hough transform) between 0 and 6
