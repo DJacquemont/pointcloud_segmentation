@@ -30,16 +30,16 @@ git submodule update --init --recursive
 #### Configuration file
 
 The YAML file `config.yaml` sets the nodes parameters:
-- verbose_level
-- path_to_output
-- floor_trim_height
-- min_pca_coeff
-- min_lr_coeff
-- rad_2_leaf_ratio
-- opt_minvotes
-- granularity
-- opt_nlines
-- radius_sizes
+- vebose_level: NONE - 0, INFO - 1, DEBUG - 2
+- path_to_output: path to the processed output data (segments and intersections)
+- floor_trim_height: cut off the pointcloud below this height
+- min_pca_coeff: minimum pca coeff to be considered as a line
+- min_weight: minimum weight coefficient for the line’s fusion
+- rad_2_leaf_ratio: ratio of radius to leaf size to determine leaf size
+- opt_minvotes: minimum number of votes to be considered a line
+- granularity: granularity of the search (Hough transform) between 0 and 6
+- opt_nlines: number of lines to be detected
+- radius_sizes: beam radius sizes
 
 #### Simulation
 

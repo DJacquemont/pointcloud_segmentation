@@ -21,12 +21,14 @@ def main():
     # Load the data from the text file
     data = pd.read_csv(data_file_path, header=0)
 
+    data['processing_time'] = data['processing_time'].astype(float)/10e6
+
     # Plotting the boxplot
     plt.figure(figsize=(8, 6))
     plt.boxplot(data['processing_time'])
     plt.title('Processing Time Boxplot')
     plt.xlabel('Processing Time')
-    plt.ylabel('Time (microseconds)')
+    plt.ylabel('Time (seconds)')
     plt.grid(True)
     plt.show()
 

@@ -134,7 +134,7 @@ private:
   std::string path_to_output;
   double floor_trim_height;
   double min_pca_coeff;
-  double min_lr_coeff;
+  double min_weight;
   int opt_minvotes;
   int opt_nlines;
   std::vector<double> radius_sizes;
@@ -192,9 +192,9 @@ void PtCdProcessing::setParams() {
     min_pca_coeff = 0.95;
   }
 
-  if (!this->node.getParam("/min_lr_coeff", min_lr_coeff)) {
-    ROS_ERROR("Failed to get param 'min_lr_coeff'");
-    min_pca_coeff = 0.1;
+  if (!this->node.getParam("/min_weight", min_weight)) {
+    ROS_ERROR("Failed to get param 'min_weight'");
+    min_weight = 0.1;
   }
 
   if (!this->node.getParam("/rad_2_leaf_ratio", rad_2_leaf_ratio)) {
@@ -236,11 +236,10 @@ void PtCdProcessing::setParams() {
   ROS_INFO("  path_to_output: %s", path_to_output.c_str());
   ROS_INFO("  floor_trim_height: %f", floor_trim_height);
   ROS_INFO("  min_pca_coeff: %f", min_pca_coeff);
-  ROS_INFO("  min_lr_coeff: %f", min_lr_coeff);
+  ROS_INFO("  min_weight: %f", min_weight);
   ROS_INFO("  opt_minvotes: %d", opt_minvotes);
   ROS_INFO("  opt_nlines: %d", opt_nlines);
-  ROS_INFO("  radius_sizes: %f, %f, %f", 
-            radius_sizes[0], radius_sizes[1], radius_sizes[2]);
+  ROS_INFO("  radius_sizes: %f, %f, %f", radius_sizes[0], radius_sizes[1], radius_sizes[2]);
   ROS_INFO("  leaf_size: %f", leaf_size);
   ROS_INFO("  opt_dx: %f", opt_dx);
   ROS_INFO("  granularity: %d", granularity);
@@ -303,7 +302,6 @@ void PtCdProcessing::processData() {
     }
 
     visualization();
-
 
     // Print all the segments
     if (verbose_level > INFO){
@@ -489,6 +487,7 @@ void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments) {
     row.resize(new_world_segments.size(), std::make_tuple(-1.0, -1.0));
   }
   
+  // Iterate through the new segments and check for intersections
 	std::vector<size_t> all_target_indices = modified_indices;
 	all_target_indices.insert(all_target_indices.end(), new_indices.begin(), new_indices.end());
 	for (size_t i = 0; i < new_world_segments.size(); ++i) {
@@ -508,6 +507,7 @@ void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments) {
 		}
 	}
 
+  // Update the world_segments and intersection_matrix
 	world_segments = new_world_segments;
   intersection_matrix = new_intersection_matrix;
 }
@@ -582,15 +582,15 @@ bool PtCdProcessing::checkSimilarity(const segment& drone_seg, const segment& wo
 		((test_seg_proj_p2-test_seg_p2).norm() < epsilon) && 
 		(drone_seg.radius == world_seg.radius)){
 
-		double lr_coeff = drone_seg.points_size/(world_seg.points_size + drone_seg.points_size);
-		lr_coeff = (lr_coeff < min_lr_coeff) ? min_lr_coeff : lr_coeff;
+		double weight = drone_seg.points_size/(world_seg.points_size + drone_seg.points_size);
+		weight = std::max(min_weight, weight);
 
-		double learning_rate = (drone_seg.pca_coeff*lr_coeff)/
-														(world_seg.pca_coeff*(1-lr_coeff) + drone_seg.pca_coeff*lr_coeff);
+		double coeff_fusion = (drone_seg.pca_coeff*weight)/
+														(world_seg.pca_coeff*(1-weight) + drone_seg.pca_coeff*weight);
 
-		Eigen::Vector3d new_world_seg_a = test_seg_proj_p1 + learning_rate*(test_seg_p1 - test_seg_proj_p1);
+		Eigen::Vector3d new_world_seg_a = test_seg_proj_p1 + coeff_fusion*(test_seg_p1 - test_seg_proj_p1);
 		Eigen::Vector3d new_world_seg_b = (test_seg_proj_p2-test_seg_proj_p1) +
-																				learning_rate*((test_seg_p2-test_seg_proj_p2)-(test_seg_p1-test_seg_proj_p1));
+																			coeff_fusion*((test_seg_p2-test_seg_proj_p2)-(test_seg_p1-test_seg_proj_p1));
 
 		Eigen::Vector3d test_seg_proj_p1 = find_proj(new_world_seg_a, new_world_seg_b, test_seg_p1);
 		Eigen::Vector3d test_seg_proj_p2 = find_proj(new_world_seg_a, new_world_seg_b, test_seg_p2);
@@ -614,8 +614,8 @@ bool PtCdProcessing::checkSimilarity(const segment& drone_seg, const segment& wo
 			target_seg.radius = drone_seg.radius;
 			target_seg.points_size = target_seg.points_size + drone_seg.points_size;
 			target_seg.points.insert(target_seg.points.end(), drone_seg.points.begin(), drone_seg.points.end());
-			target_seg.pca_coeff = target_seg.pca_coeff*(1-lr_coeff) + drone_seg.pca_coeff*lr_coeff;
-			target_seg.pca_eigenvalues = target_seg.pca_eigenvalues*(1-lr_coeff) + drone_seg.pca_eigenvalues*lr_coeff;
+			target_seg.pca_coeff = target_seg.pca_coeff*(1-weight) + drone_seg.pca_coeff*weight;
+			target_seg.pca_eigenvalues = target_seg.pca_eigenvalues*(1-weight) + drone_seg.pca_eigenvalues*weight;
 
 			similar = true;
 		}
