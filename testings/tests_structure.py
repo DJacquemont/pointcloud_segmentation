@@ -2,7 +2,7 @@ from controller import Supervisor
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
+import seaborn as sns
 import yaml
 import os
 
@@ -40,19 +40,6 @@ def read_segments_from_file(data_file_path):
             'endpoints': [row['t_min'], row['t_max']]
         })
     return segments_proc
-
-def read_intersections_from_file(data_file_path):
-    """Read intersection information from a file."""
-    df = pd.read_csv(data_file_path, header=0)
-    intersections_proc = []
-    for _, row in df.iterrows():
-        intersections_proc.append({
-            'seg1': row['seg1'],
-            't1': row['t1'],
-            'seg2': row['seg2'],
-            't2': row['t2']
-        })
-    return intersections_proc
 
 def find_output_file(filename):
     """Find the path to the processing time data file."""
@@ -100,7 +87,7 @@ def get_similar_segments(segments_webots, segments_proc):
 
 def plot_segments(segments_webots, segments_proc, similar_segments):
     """Plot segments from Webots and from the processing time data file."""
-    fig = plt.figure()
+    fig = plt.figure(figsize=(8,6))
     ax = fig.add_subplot(111, projection='3d')
 
     # Function to draw a single segment
@@ -132,40 +119,33 @@ def plot_segments(segments_webots, segments_proc, similar_segments):
         color_index += 1
 
     # Set labels for the axes
-    ax.set_xlabel('X axis [m]')
-    ax.set_ylabel('Y axis [m]')
-    ax.set_zlabel('Z axis [m]')
-    plt.title('Webots vs Processed Segments')
-    plt.show()
+    labelpad_distance = 20 
+    ax.set_xlabel('X axis [m]', fontsize=16, labelpad=labelpad_distance)
+    ax.set_ylabel('Y axis [m]', fontsize=16, labelpad=labelpad_distance)
+    ax.set_zlabel('Z axis [m]', fontsize=16, labelpad=labelpad_distance)
+    ax.tick_params(labelsize=12)
+    plt.title('Webots vs Processed Segments', fontsize=18)
 
 def plot_distance_vs_angle(similar_segments):
-    """Plot a scatter plot of the distance vs angle for similar segments."""
+    """Plot a scatter plot of the distance vs angle for similar segments using Seaborn."""
     distances = [seg[2] for seg in similar_segments]
     angles = [seg[3] for seg in similar_segments]
+    data = pd.DataFrame({'Distance Error [m]': distances, 'Angle Error [rad]': angles})
 
-    plt.figure()
+    plt.figure(figsize=(8,6))
+    sns.scatterplot(data=data, x='Distance Error [m]', y='Angle Error [rad]', color='red')
+
+    # Annotating points
     for i, (distance, angle) in enumerate(zip(distances, angles)):
-        plt.scatter(distance, angle, color='red')
-        plt.text(distance, angle, str(i), color='blue', fontsize=8)
+        plt.text(distance, angle, str(i + 1), fontsize=12)
 
-    plt.xlabel('Distance Error [m]')
-    plt.ylabel('Angle Error [rad]')
-    plt.xlim([0, 0.55])
-    plt.ylim([0, 0.12])
-    plt.title('Distance vs. Angle Error for Similar Segments')
+    # Setting labels with increased font size
+    plt.xlabel('Distance Error [m]', fontsize=16)
+    plt.ylabel('Angle Error [rad]', fontsize=16)
+    plt.title('Distance vs. Angle Error for Similar Segments', fontsize=18)
     plt.grid(True)
-    plt.show()
+    sns.set_context("talk")
 
-def plot_error_coefficients(similar_segments):
-    """Plot a histogram of the error coefficients for similar segments."""
-    error_coefficients = [seg[4] for seg in similar_segments]
-    plt.figure()
-    plt.boxplot(error_coefficients)
-    plt.xlabel('Error Coefficient')
-    plt.ylabel('Error [rad*m]')
-    plt.title('Error Coefficients for Similar Segments')
-    plt.grid(True)
-    plt.show()
 
 def main():
     # Create a Supervisor instance
@@ -177,9 +157,6 @@ def main():
     # Read segments from the file
     segments_proc = read_segments_from_file(find_output_file('segments.csv'))
 
-    # Read intersections from the file
-    intersections_proc = read_intersections_from_file(find_output_file('intersections.csv'))
-
     # Find similar segments
     similar_segments = get_similar_segments(segments_webots, segments_proc)
 
@@ -188,9 +165,6 @@ def main():
 
     # Plot distance vs angle scatter plot
     plot_distance_vs_angle(similar_segments)
-
-    # Plot error coefficients
-    plot_error_coefficients(similar_segments)
 
     plt.show()
 

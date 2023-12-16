@@ -16,12 +16,9 @@
 #include <mutex>
 #include <thread>
 #include <condition_variable>
-#include <chrono>
 
 #include "hough_3d_lines.h"
 #include <assert.h>
-
-using namespace std::chrono;
 
 enum verbose {NONE, INFO, WARN};
 
@@ -46,9 +43,17 @@ class PtCdProcessing
     Eigen::Quaterniond orientation;
   };
 
+  struct callback_info {
+    double wall_time;
+    double callback_time;
+    int seg_vec_size;
+  };
+
 public:
   PtCdProcessing() : tfListener(tfBuffer)
   {
+    program_start_time = ros::Time::now();
+
     running = true;
     processingThread = std::thread(&PtCdProcessing::processData, this);
 
@@ -86,6 +91,8 @@ public:
                       pcl::PointCloud<pcl::PointXYZ>::Ptr& output_filtered_cloud_XYZ);
 
   void drone2WorldSeg(std::vector<segment>& drone_segments);
+
+  void heighSegmentCutoff(std::vector<segment>& drone_segments);
 
   void segFiltering(std::vector<segment>& drone_segments);
 
@@ -143,15 +150,16 @@ private:
   int granularity;
   double rad_2_leaf_ratio;
 
-  // storing time for the callback
-  std::vector<double> callback_time;
+  // storing callback time info
+  std::vector<callback_info> callback_info_vec;
+  ros::Time program_start_time = ros::Time::now();
 };
 
 
 /**
  * @brief Callback function receiving ToF images from the Autopilot package
  * 
- * @param msg Message containing the point cloud
+ * @param[in] msg Message containing the point cloud
  * @return ** void 
  */
 void PtCdProcessing::pointcloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg)
@@ -263,7 +271,7 @@ void PtCdProcessing::processData() {
 
     lock.unlock();
 
-    auto processing_start = high_resolution_clock::now();
+    ros::Time processing_start = ros::Time::now();
 
     // Find the closest pose in time to the point cloud's timestamp
     if (closestDronePose(latestMsgCopy.header.stamp)){
@@ -286,6 +294,9 @@ void PtCdProcessing::processData() {
 
     // Transform the segments from the drone's frame to the world frame
     drone2WorldSeg(drone_segments);
+
+    // Trim the segments that are below a certain treshold
+    heighSegmentCutoff(drone_segments);
 
     // Filter the segments that already exist in the world_segments
     segFiltering(drone_segments);
@@ -313,12 +324,19 @@ void PtCdProcessing::processData() {
       }
     }
 
-    auto processing_end = high_resolution_clock::now();
-    int processing_duration = duration_cast<microseconds>(processing_end - processing_start).count();
-    callback_time.push_back(processing_duration);
+    ros::Time processing_end = ros::Time::now();
+    int callback_time = (processing_end - processing_start).toNSec() / 1000;
+    int wall_time = (processing_end - program_start_time).toNSec() / 1000;
+
+    // Store the callback time info for vizualization
+    callback_info callback_info_tmp;
+    callback_info_tmp.wall_time = wall_time;
+    callback_info_tmp.callback_time = callback_time;
+    callback_info_tmp.seg_vec_size = world_segments.size();
+    callback_info_vec.push_back(callback_info_tmp);
 
     if (verbose_level > NONE){
-      ROS_INFO("Callback execution time: %d us", processing_duration);
+      ROS_INFO("Callback execution time: %d us", callback_time);
     }
   }
 }
@@ -327,7 +345,7 @@ void PtCdProcessing::processData() {
 /**
  * @brief Finds the closest pose in time to the point cloud's timestamp
  * 
- * @param timestamp Timestamp of the point cloud
+ * @param[in] timestamp Timestamp of the point cloud
  * @return int 0 if successful, 1 otherwise
  */
 int PtCdProcessing::closestDronePose(const ros::Time& timestamp) {
@@ -356,8 +374,8 @@ int PtCdProcessing::closestDronePose(const ros::Time& timestamp) {
 /**
  * @brief Filtering pointcloud using PCL thresholding and voxel grid
  * 
- * @param cloud cloud to be filtered
- * @param filtered_cloud_XYZ filtered cloud
+ * @param[in] cloud cloud to be filtered
+ * @param[out] filtered_cloud_XYZ filtered cloud
  */
 void PtCdProcessing::cloudFiltering(const pcl::PCLPointCloud2::Ptr& input_cloud, 
                                     pcl::PointCloud<pcl::PointXYZ>::Ptr& output_filtered_cloud_XYZ){
@@ -400,40 +418,45 @@ void PtCdProcessing::cloudFiltering(const pcl::PCLPointCloud2::Ptr& input_cloud,
 /**
  * @brief Transform the segments from the drone's frame to the world frame
  * 
- * @param drone_segments segments in the drone's frame 
+ * @param[in,out] drone_segments segments in the drone's frame 
  */
 void PtCdProcessing::drone2WorldSeg(std::vector<segment>& drone_segments){
 
   // Convert the quaternion to a rotation matrix
   Eigen::Matrix3d rotation_matrix = drone.orientation.toRotationMatrix();
 
+  for (segment& drone_seg : drone_segments) {
+
+    // Transform the segment in the world frame
+    drone_seg.a = rotation_matrix * drone_seg.a + drone.position;
+    drone_seg.b = rotation_matrix * drone_seg.b;
+
+    std::vector<Eigen::Vector3d> new_points;
+    for (const Eigen::Vector3d& point : drone_seg.points){
+      new_points.push_back(rotation_matrix * point + drone.position);
+    }
+    drone_seg.points = new_points;
+  }
+}
+
+
+/**
+ * @brief Trim the segments that are below a certain treshold
+ * 
+ * @param[in,out] drone_segments segments in the drone's frame 
+ */
+void PtCdProcessing::heighSegmentCutoff(std::vector<segment>& drone_segments){
+
   std::vector<segment> valid_segments;
 
   for (segment& drone_seg : drone_segments) {
 
-    // Transform the segment in the world frame
-    segment test_seg;
-    test_seg.a = rotation_matrix * drone_seg.a + drone.position;
-    test_seg.b = rotation_matrix * drone_seg.b;
-    test_seg.t_min = drone_seg.t_min;
-    test_seg.t_max = drone_seg.t_max;
-
     // Check if the segment is above the ground
-    Eigen::Vector3d test_seg_p1 = test_seg.t_min * test_seg.b + test_seg.a;
-    Eigen::Vector3d test_seg_p2 = test_seg.t_max * test_seg.b + test_seg.a;
+    Eigen::Vector3d test_seg_p1 = drone_seg.t_min * drone_seg.b + drone_seg.a;
+    Eigen::Vector3d test_seg_p2 = drone_seg.t_max * drone_seg.b + drone_seg.a;
 
     if (test_seg_p1.z() > floor_trim_height || test_seg_p2.z() > floor_trim_height){
-
-      test_seg.radius = drone_seg.radius;
-      test_seg.points_size = drone_seg.points_size;
-      test_seg.pca_coeff = drone_seg.pca_coeff;
-      test_seg.pca_eigenvalues = drone_seg.pca_eigenvalues;
-
-      for (const Eigen::Vector3d& point : drone_seg.points){
-        test_seg.points.push_back(rotation_matrix * point + drone.position);
-      }
-
-      valid_segments.push_back(test_seg);
+      valid_segments.push_back(drone_seg);
     }
   }
 
@@ -445,7 +468,7 @@ void PtCdProcessing::drone2WorldSeg(std::vector<segment>& drone_segments){
  * @brief Function filtering already existing or invalid segments, fusing similar segments, 
  * and adding new segments to the world_segments
  * 
- * @param drone_segments Segments in the drone's frame
+ * @param[in] drone_segments Segments in the drone's frame
  */
 void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments) {
 
@@ -516,9 +539,9 @@ void PtCdProcessing::segFiltering(std::vector<segment>& drone_segments) {
 /**
  * @brief Function checking if two segments are connected, and if so, returns the intersection point
  * 
- * @param drone_seg 
- * @param world_seg 
- * @param intersection 
+ * @param[in] drone_seg 
+ * @param[in,out] world_seg 
+ * @param[in,out] intersection 
  * @return true 
  * @return false 
  */
@@ -558,9 +581,9 @@ bool PtCdProcessing::checkConnections(const segment& drone_seg, const segment& w
 /**
  * @brief Check if two segments are similar, and if so it returns the fused segment
  * 
- * @param drone_seg 
- * @param world_seg 
- * @param target_seg 
+ * @param[in] drone_seg 
+ * @param[in] world_seg 
+ * @param[in,out] target_seg 
  * @return true 
  * @return false 
  */
@@ -568,40 +591,48 @@ bool PtCdProcessing::checkSimilarity(const segment& drone_seg, const segment& wo
 
 	bool similar = false;
 
-	Eigen::Vector3d test_seg_p1 = drone_seg.t_min * drone_seg.b + drone_seg.a;
-	Eigen::Vector3d test_seg_p2 = drone_seg.t_max * drone_seg.b + drone_seg.a;
-	Eigen::Vector3d world_seg_p1 = world_seg.t_min * world_seg.b + world_seg.a;
+  Eigen::Vector3d world_seg_p1 = world_seg.t_min * world_seg.b + world_seg.a;
 	Eigen::Vector3d world_seg_p2 = world_seg.t_max * world_seg.b + world_seg.a;
 
+  // Calculate the projection of the drone segment on the world segment
+	Eigen::Vector3d test_seg_p1 = drone_seg.t_min * drone_seg.b + drone_seg.a;
+	Eigen::Vector3d test_seg_p2 = drone_seg.t_max * drone_seg.b + drone_seg.a;
 	Eigen::Vector3d test_seg_proj_p1 = find_proj(world_seg.a, world_seg.b, test_seg_p1);
 	Eigen::Vector3d test_seg_proj_p2 = find_proj(world_seg.a, world_seg.b, test_seg_p2);
 
+  // Set the epsilon for the similarity check
 	double epsilon = drone_seg.radius + world_seg.radius + 2*(2*opt_dx);
 
 	if (((test_seg_proj_p1-test_seg_p1).norm() < epsilon) && 
 		((test_seg_proj_p2-test_seg_p2).norm() < epsilon) && 
 		(drone_seg.radius == world_seg.radius)){
 
+    // Calculate the weight of the fusion
 		double weight = drone_seg.points_size/(world_seg.points_size + drone_seg.points_size);
 		weight = std::max(min_weight, weight);
 
+    // Calculate the fusion coeeficient based on the PCA of each segments' points
 		double coeff_fusion = (drone_seg.pca_coeff*weight)/
 														(world_seg.pca_coeff*(1-weight) + drone_seg.pca_coeff*weight);
 
+    // New potential world segment
 		Eigen::Vector3d new_world_seg_a = test_seg_proj_p1 + coeff_fusion*(test_seg_p1 - test_seg_proj_p1);
 		Eigen::Vector3d new_world_seg_b = (test_seg_proj_p2-test_seg_proj_p1) +
 																			coeff_fusion*((test_seg_p2-test_seg_proj_p2)-(test_seg_p1-test_seg_proj_p1));
 
+    // Calculate the projection of the drone segment & world segment on the new potential world segment
 		Eigen::Vector3d test_seg_proj_p1 = find_proj(new_world_seg_a, new_world_seg_b, test_seg_p1);
 		Eigen::Vector3d test_seg_proj_p2 = find_proj(new_world_seg_a, new_world_seg_b, test_seg_p2);
 		Eigen::Vector3d world_seg_proj_p1 = find_proj(new_world_seg_a, new_world_seg_b, world_seg_p1);
 		Eigen::Vector3d world_seg_proj_p2 = find_proj(new_world_seg_a, new_world_seg_b, world_seg_p2);
 
+    // Calculate the t values of the projections on the new potential world segment
 		double test_seg_proj_t1 = (test_seg_proj_p1.x() - new_world_seg_a.x()) / new_world_seg_b.x();
 		double test_seg_proj_t2 = (test_seg_proj_p2.x() - new_world_seg_a.x()) / new_world_seg_b.x();
 		double world_seg_proj_t1 = (world_seg_proj_p1.x() - new_world_seg_a.x()) / new_world_seg_b.x();
 		double world_seg_proj_t2 = (world_seg_proj_p2.x() - new_world_seg_a.x()) / new_world_seg_b.x();
 
+    // Check if the projections overlap
 		if (!((std::min(test_seg_proj_t1, test_seg_proj_t2)>std::max(world_seg_proj_t1, world_seg_proj_t2)) ||
 						(std::max(test_seg_proj_t1, test_seg_proj_t2)<std::min(world_seg_proj_t1, world_seg_proj_t2)))){
 
@@ -622,6 +653,7 @@ bool PtCdProcessing::checkSimilarity(const segment& drone_seg, const segment& wo
 	}
 
 	if (!similar){
+    // If the segments are not similar, the target segment is the world segment
 		target_seg = drone_seg;
 	}
 
@@ -807,7 +839,7 @@ void PtCdProcessing::clearMarkers() {
 /**
  * @brief Saving the intersections to a file
  * 
- * @param filepath 
+ * @param[in] filepath 
  */
 void PtCdProcessing::saveIntersectionsToFile(const std::string& filepath) {
   std::ofstream file(filepath);
@@ -835,7 +867,7 @@ void PtCdProcessing::saveIntersectionsToFile(const std::string& filepath) {
 /**
  * @brief Saving the segments to a file
  * 
- * @param filepath 
+ * @param[in] filepath 
  */
 void PtCdProcessing::saveSegmentsToFile(const std::string& filepath) {
   std::ofstream file(filepath);
@@ -862,7 +894,7 @@ void PtCdProcessing::saveSegmentsToFile(const std::string& filepath) {
 /**
  * @brief Saving the processing time to a file
  * 
- * @param filepath 
+ * @param[in] filepath 
  */
 void PtCdProcessing::saveProcessingTimeToFile(const std::string& filepath) {
   std::ofstream file(filepath);
@@ -871,9 +903,10 @@ void PtCdProcessing::saveProcessingTimeToFile(const std::string& filepath) {
     return;
   }
 
-  file << "processing_time" << std::endl;
-  for (size_t i = 0; i < callback_time.size(); ++i) {
-    file << callback_time[i] << std::endl;
+  file << "wall_time,processing_time,seg_vec_size" << std::endl;
+  for (size_t i = 0; i < callback_info_vec.size(); ++i) {
+    file << callback_info_vec[i].wall_time << "," << callback_info_vec[i].callback_time 
+    << "," << callback_info_vec[i].seg_vec_size << std::endl;
   }
 
   file.close();

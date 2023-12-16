@@ -6,14 +6,15 @@
 #include <geometry_msgs/PoseStamped.h>
 
 
-//--------------------------------------------------------------------
-// Callback functions
-//--------------------------------------------------------------------
-
-// Callback function broadcasting a TF transform mocap -> world to display 
-// the ToF point-cloud from the drone's perpective (world frame taking the
-// drone's pose & orientation in the mocap frame).
-// This is not conventional as the world frame is supposed to be static.
+/**
+ * @brief Callback function broadcasting a TF transform mocap -> world to display 
+ * the ToF point-cloud from the drone's perpective (world frame taking the drone's 
+ * pose & orientation in the mocap frame).
+ * 
+ * This is not conventional as the world frame is supposed to be static.
+ * 
+ * @param[in] msg 
+ */
 void poseCallback(const geometry_msgs::PoseStamped::ConstPtr& msg)
 {
   static tf2_ros::TransformBroadcaster br;
@@ -33,11 +34,6 @@ void poseCallback(const geometry_msgs::PoseStamped::ConstPtr& msg)
   br.sendTransform(transformStamped);
 }
 
-
-
-//--------------------------------------------------------------------
-// Main function
-//--------------------------------------------------------------------
 
 int main(int argc, char* argv[]){
 

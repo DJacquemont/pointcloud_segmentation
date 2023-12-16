@@ -29,12 +29,14 @@ struct segment {
 };
 
 /**
- * @brief Finds the projection of a point on a line
+ * @brief Finds the t values of the line corresponding to the projection of a point
  * 
- * @param a anchor point of the line
- * @param b direction of the line
- * @param p point to project
- * @return Eigen::Vector3d projection of p on the line
+ * @param[in] a anchor point of the line
+ * @param[in] b direction of the line
+ * @param[in] p point to project
+ * @param[out] t_values vector of t values
+ * @param[out] p_norm vector of norm of p corresponding to t
+ * @return int 0 if successful, 1 otherwise
  */
 int find_t(Eigen::Vector3d a, Eigen::Vector3d b, Eigen::Vector3d p, std::vector<double>& t_values, std::vector<double>& p_norm){
 
@@ -68,9 +70,9 @@ int find_t(Eigen::Vector3d a, Eigen::Vector3d b, Eigen::Vector3d p, std::vector<
 /**
  * @brief Finds the projection of a point on a line
  * 
- * @param a anchor point of the line
- * @param b direction of the line
- * @param p point to project
+ * @param[in] a anchor point of the line
+ * @param[in] b direction of the line
+ * @param[in] p point to project
  * @return Eigen::Vector3d projection of p on the line
  */
 Eigen::Vector3d find_proj(Eigen::Vector3d a, Eigen::Vector3d b, Eigen::Vector3d p){
@@ -86,7 +88,7 @@ Eigen::Vector3d find_proj(Eigen::Vector3d a, Eigen::Vector3d b, Eigen::Vector3d 
 /**
  * @brief Computing the PCA of the segment's points
  * 
- * @param drone_seg segment in the drone's frame
+ * @param[in] drone_seg segment in the drone's frame
  * @return Eigen::Vector3d Eigenvalues
  */
 Eigen::Vector3d segPCA(const std::vector<Eigen::Vector3d>& points) {
@@ -111,9 +113,9 @@ Eigen::Vector3d segPCA(const std::vector<Eigen::Vector3d>& points) {
 /**
  * @brief orthogonal least squares fit with libeigen
  * 
- * @param pc point cloud
- * @param a anchor point of the line
- * @param b direction of the line
+ * @param[in] pc point cloud
+ * @param[out] a anchor point of the line
+ * @param[out] b direction of the line
  * @return double largest eigenvalue of the scatter matrix
  */
 double orthogonal_LSQ(const PointCloud &pc, Vector3d* a, Vector3d* b){
@@ -152,13 +154,13 @@ double orthogonal_LSQ(const PointCloud &pc, Vector3d* a, Vector3d* b){
 /**
  * @brief Method computing 3d lines with the Hough transform
  * 
- * @param pc point cloud
- * @param computed_lines vector of segments
- * @param opt_dx discretization step
- * @param radius_sizes vector of radius sizes
- * @param opt_minvotes minimum number of votes for a line to be considered
- * @param opt_nlines maximum number of lines to be computed
- * @param VERBOSE verbosity level
+ * @param[in] pc point cloud
+ * @param[out] computed_lines vector of segments
+ * @param[in] opt_dx discretization step
+ * @param[in] radius_sizes vector of radius sizes
+ * @param[in] opt_minvotes minimum number of votes for a line to be considered
+ * @param[in] opt_nlines maximum number of lines to be computed
+ * @param[in] VERBOSE verbosity level
  * @return int 0 if successful, 1 otherwise
  */
 int hough3dlines(const pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<segment>& computed_lines, 
