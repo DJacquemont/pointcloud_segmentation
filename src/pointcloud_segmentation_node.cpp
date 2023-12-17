@@ -47,6 +47,7 @@ class PtCdProcessing
     double wall_time;
     double callback_time;
     int seg_vec_size;
+    int nblines;
   };
 
 public:
@@ -286,8 +287,9 @@ void PtCdProcessing::processData() {
 
     // segment extraction with the Hough transform
     std::vector<segment> drone_segments;
+    int nblines_extracted = 0;
     if (hough3dlines(*filtered_cloud_XYZ, drone_segments, opt_dx, granularity, radius_sizes, 
-                    opt_minvotes, opt_nlines, min_pca_coeff, rad_2_leaf_ratio, verbose_level) 
+                    opt_minvotes, opt_nlines, min_pca_coeff, nblines_extracted, rad_2_leaf_ratio, verbose_level) 
                     && verbose_level > INFO){
       ROS_WARN("Unable to perform the Hough transform");
     }
@@ -332,6 +334,7 @@ void PtCdProcessing::processData() {
     callback_info callback_info_tmp;
     callback_info_tmp.wall_time = wall_time;
     callback_info_tmp.callback_time = callback_time;
+    callback_info_tmp.nblines = nblines_extracted;
     callback_info_tmp.seg_vec_size = world_segments.size();
     callback_info_vec.push_back(callback_info_tmp);
 
@@ -903,10 +906,10 @@ void PtCdProcessing::saveProcessingTimeToFile(const std::string& filepath) {
     return;
   }
 
-  file << "wall_time,processing_time,seg_vec_size" << std::endl;
+  file << "wall_time,processing_time,seg_vec_size,nblines" << std::endl;
   for (size_t i = 0; i < callback_info_vec.size(); ++i) {
     file << callback_info_vec[i].wall_time << "," << callback_info_vec[i].callback_time 
-    << "," << callback_info_vec[i].seg_vec_size << std::endl;
+    << "," << callback_info_vec[i].seg_vec_size << "," << callback_info_vec[i].nblines << std::endl;
   }
 
   file.close();

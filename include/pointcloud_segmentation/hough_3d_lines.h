@@ -165,7 +165,7 @@ double orthogonal_LSQ(const PointCloud &pc, Vector3d* a, Vector3d* b){
  */
 int hough3dlines(const pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<segment>& computed_lines, 
                   const double opt_dx, const int granularity, const std::vector<double> radius_sizes, 
-                  const int opt_minvotes, const int opt_nlines, const double min_pca_coeff, 
+                  const int opt_minvotes, const int opt_nlines, const double min_pca_coeff, int& nblines_extracted,
                   const double rad_2_leaf_ratio, const int VERBOSE){
 
   PointCloud X;
@@ -339,6 +339,8 @@ int hough3dlines(const pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<segment>&
 
   } while ((X.points.size() > 1) && 
            ((opt_nlines == 0) || (opt_nlines > nlines)) && ros::ok());
+           
+  nblines_extracted = nlines;
 
   // clean up
   delete hough;

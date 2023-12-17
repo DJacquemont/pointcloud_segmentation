@@ -24,27 +24,21 @@ def main():
 
     data['wall_time'] = data['wall_time'].astype(float)/10e6
     data['processing_time'] = data['processing_time'].astype(float)/10e6
-    data['seg_vec_size'] = data['seg_vec_size'].astype(int)
 
     # Set the Seaborn style and context for larger fonts
     sns.set(style="whitegrid")
-    sns.set_context("talk")  # This line sets a larger scale for fonts and elements
-
-    # Creating a figure for subplots
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    sns.set_context("talk")
 
     # Plotting the boxplot for processing time using Seaborn
-    sns.boxplot(data=data['processing_time'], ax=axes[0])
-    axes[0].set_title('Processing Time Boxplot', fontsize=18)
-    axes[0].set_ylabel('Time [s]', fontsize=16)
+    plt.figure(figsize=(10, 8))
+    sns.boxplot(data=data['processing_time'])
+    plt.ylabel('Processing Time [s]', fontsize=20)
 
-    # Plotting the line and scatter plot for seg_vec_size using Seaborn
-    sns.lineplot(x='wall_time', y='seg_vec_size', data=data, ax=axes[1])
-    sns.scatterplot(x='wall_time', y='seg_vec_size', data=data, color='red', ax=axes[1])
-    axes[1].set_title('Segment Vector Size Over Time', fontsize=18)
-    axes[1].set_xlabel('Wall Time [s]', fontsize=16)
-    axes[1].set_ylabel('Segment Vector Size', fontsize=16)
-
+    plt.figure(figsize=(10, 8))
+    sns.boxplot(x='nblines', y='processing_time', data=data)
+    plt.xlabel('Number of Lines', fontsize=20)
+    plt.ylabel('Processing Time [s]', fontsize=20)
+    # plt.title('Processing Time Distribution by Number of Lines', fontsize=22)
     plt.show()
 
 if __name__ == "__main__":

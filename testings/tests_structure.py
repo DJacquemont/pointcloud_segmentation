@@ -2,6 +2,7 @@ from controller import Supervisor
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.lines as mlines
 import seaborn as sns
 import yaml
 import os
@@ -91,19 +92,21 @@ def plot_segments(segments_webots, segments_proc, similar_segments):
     ax = fig.add_subplot(111, projection='3d')
 
     # Function to draw a single segment
-    def draw_segment(segment, color='b', linestyle='-'):
+    def draw_segment(segment, color='b', linestyle='-', label=None):
         a, b, endpoints = segment['a'], segment['b'], segment['endpoints']
         points = [np.array(a) + np.array(b) * t for t in endpoints]
         xs, ys, zs = zip(*points)
-        ax.plot(xs, ys, zs, color=color, linestyle=linestyle)
+        ax.plot(xs, ys, zs, color=color, linestyle=linestyle, label=label)
 
-    # Draw segments from Webots
-    for segment in segments_webots:
-        draw_segment(segment, color='b')
+    # Draw segments from Webots with label for legend
+    for idx, segment in enumerate(segments_webots):
+        label = 'Webots Segment' if idx == 0 else None
+        draw_segment(segment, color='b', label=label)
 
-    # Draw segments from file
-    for segment in segments_proc:
-        draw_segment(segment, color='b', linestyle=':')
+    # Draw segments from file with label for legend
+    for idx, segment in enumerate(segments_proc):
+        label = 'Processed Segment' if idx == 0 else None
+        draw_segment(segment, color='b', linestyle=':', label=label)
 
     # List of colors to cycle through for similar segments
     colors = ['g', 'r', 'c', 'm', 'y', 'k']
@@ -120,11 +123,12 @@ def plot_segments(segments_webots, segments_proc, similar_segments):
 
     # Set labels for the axes
     labelpad_distance = 20 
-    ax.set_xlabel('X axis [m]', fontsize=16, labelpad=labelpad_distance)
-    ax.set_ylabel('Y axis [m]', fontsize=16, labelpad=labelpad_distance)
-    ax.set_zlabel('Z axis [m]', fontsize=16, labelpad=labelpad_distance)
-    ax.tick_params(labelsize=12)
-    plt.title('Webots vs Processed Segments', fontsize=18)
+    ax.set_xlabel('X axis [m]', fontsize=20, labelpad=labelpad_distance)
+    ax.set_ylabel('Y axis [m]', fontsize=20, labelpad=labelpad_distance)
+    ax.set_zlabel('Z axis [m]', fontsize=20, labelpad=labelpad_distance)
+    ax.tick_params(labelsize=16)
+    ax.legend(loc='upper right', fontsize=14)
+    # plt.title('Webots vs Processed Segments', fontsize=18)
 
 def plot_distance_vs_angle(similar_segments):
     """Plot a scatter plot of the distance vs angle for similar segments using Seaborn."""
@@ -133,16 +137,19 @@ def plot_distance_vs_angle(similar_segments):
     data = pd.DataFrame({'Distance Error [m]': distances, 'Angle Error [rad]': angles})
 
     plt.figure(figsize=(8,6))
-    sns.scatterplot(data=data, x='Distance Error [m]', y='Angle Error [rad]', color='red')
+    scatter = sns.scatterplot(data=data, x='Distance Error [m]', y='Angle Error [rad]', color='red')
 
     # Annotating points
     for i, (distance, angle) in enumerate(zip(distances, angles)):
-        plt.text(distance, angle, str(i + 1), fontsize=12)
+        plt.text(distance, angle, str(i + 1), fontsize=14)
 
     # Setting labels with increased font size
-    plt.xlabel('Distance Error [m]', fontsize=16)
-    plt.ylabel('Angle Error [rad]', fontsize=16)
-    plt.title('Distance vs. Angle Error for Similar Segments', fontsize=18)
+    plt.xlabel('Distance Error [m]', fontsize=20)
+    plt.ylabel('Angle Error [rad]', fontsize=20)
+    plt.tick_params(labelsize=16)
+    red_dot = mlines.Line2D([], [], color='red', marker='o', linestyle='None', markersize=10, label='Extracted Segments')
+    plt.legend(handles=[red_dot], loc='upper right', fontsize=14)
+    # plt.title('Distance vs. Angle Error for Similar Segments', fontsize=18)
     plt.grid(True)
     sns.set_context("talk")
 
