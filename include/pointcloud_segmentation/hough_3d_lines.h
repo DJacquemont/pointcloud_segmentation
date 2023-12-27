@@ -157,6 +157,7 @@ double orthogonal_LSQ(const PointCloud &pc, Vector3d* a, Vector3d* b){
  * @param[in] pc point cloud
  * @param[out] computed_lines vector of segments
  * @param[in] opt_dx discretization step
+ * @param[in] diag_voxel diagonal of the voxel
  * @param[in] radius_sizes vector of radius sizes
  * @param[in] opt_minvotes minimum number of votes for a line to be considered
  * @param[in] opt_nlines maximum number of lines to be computed
@@ -164,7 +165,7 @@ double orthogonal_LSQ(const PointCloud &pc, Vector3d* a, Vector3d* b){
  * @return int 0 if successful, 1 otherwise
  */
 int hough3dlines(const pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<segment>& computed_lines, 
-                  const double opt_dx, const int granularity, const std::vector<double> radius_sizes, 
+                  const double opt_dx, const double diag_voxel, const int granularity, const std::vector<double> radius_sizes, 
                   const int opt_minvotes, const int opt_nlines, const double min_pca_coeff, int& nblines_extracted,
                   const double rad_2_leaf_ratio, const int VERBOSE){
 
@@ -308,7 +309,7 @@ int hough3dlines(const pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<segment>&
     
 
     // add line to vector if conditions are met
-    if (min_radius_diff < opt_dx && max_radius <= closest_radius && max_dist < 2*opt_dx){
+    if (min_radius_diff < diag_voxel && max_radius <= closest_radius && max_dist < 2*diag_voxel){
 
       Eigen::Vector3d pca_eigenvalues = segPCA(points);
       double pca_coeff = pca_eigenvalues[0] / (pca_eigenvalues[0] + pca_eigenvalues[1] + pca_eigenvalues[2]);
@@ -316,7 +317,7 @@ int hough3dlines(const pcl::PointCloud<pcl::PointXYZ>& pc, std::vector<segment>&
       Eigen::Vector3d test_seg_p1 = t_values.front() * b_eigen + a_eigen;
       Eigen::Vector3d test_seg_p2 = t_values.back() * b_eigen + a_eigen;
       double length_seg = (test_seg_p2 - test_seg_p1).norm();
-      int min_nb_points_seg = static_cast<int>(2.0*closest_radius*length_seg/(rad_2_leaf_ratio*2*opt_dx*2*opt_dx));
+      int min_nb_points_seg = static_cast<int>(2.0*closest_radius*length_seg/(rad_2_leaf_ratio*2*diag_voxel*2*diag_voxel));
 
       if (pca_coeff > min_pca_coeff && points.size() > min_nb_points_seg){
 

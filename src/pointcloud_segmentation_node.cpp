@@ -147,6 +147,7 @@ private:
   int opt_nlines;
   std::vector<double> radius_sizes;
   double leaf_size;
+  double diag_voxel;
   double opt_dx;
   int granularity;
   double rad_2_leaf_ratio;
@@ -238,6 +239,7 @@ void PtCdProcessing::setParams() {
   }
 
   leaf_size = std::min(radius_sizes[0], radius_sizes[radius_sizes.size()-1]) / rad_2_leaf_ratio;
+  diag_voxel = sqrt(3) * leaf_size;
   opt_dx = sqrt(3) * leaf_size;
 
   ROS_INFO("Configuration:");
@@ -251,6 +253,7 @@ void PtCdProcessing::setParams() {
   ROS_INFO("  radius_sizes: %f, %f, %f", radius_sizes[0], radius_sizes[1], radius_sizes[2]);
   ROS_INFO("  leaf_size: %f", leaf_size);
   ROS_INFO("  opt_dx: %f", opt_dx);
+  ROS_INFO("  diag_voxel: %f", diag_voxel);
   ROS_INFO("  granularity: %d", granularity);
 }
 
@@ -288,7 +291,7 @@ void PtCdProcessing::processData() {
     // segment extraction with the Hough transform
     std::vector<segment> drone_segments;
     int nblines_extracted = 0;
-    if (hough3dlines(*filtered_cloud_XYZ, drone_segments, opt_dx, granularity, radius_sizes, 
+    if (hough3dlines(*filtered_cloud_XYZ, drone_segments, opt_dx, diag_voxel, granularity, radius_sizes, 
                     opt_minvotes, opt_nlines, min_pca_coeff, nblines_extracted, rad_2_leaf_ratio, verbose_level) 
                     && verbose_level > INFO){
       ROS_WARN("Unable to perform the Hough transform");
@@ -567,7 +570,7 @@ bool PtCdProcessing::checkConnections(const segment& drone_seg, const segment& w
 	Eigen::Vector3d sol_intersection = LHS.colPivHouseholderQr().solve(RHS);
 	double dist_intersection = abs(sol_intersection[2]);
 
-	double epsilon = 2*opt_dx + drone_seg.radius + world_seg.radius;
+	double epsilon = 2*diag_voxel + drone_seg.radius + world_seg.radius;
 	if ((((sol_intersection[0] + drone_seg.t_min) >= drone_seg.t_min) && ((sol_intersection[0] + drone_seg.t_min) <= drone_seg.t_max)) &&
           (((sol_intersection[1] + world_seg.t_min) >= world_seg.t_min) && ((sol_intersection[1] + world_seg.t_min) <= world_seg.t_max)) &&
           dist_intersection < epsilon) {
@@ -604,7 +607,7 @@ bool PtCdProcessing::checkSimilarity(const segment& drone_seg, const segment& wo
 	Eigen::Vector3d test_seg_proj_p2 = find_proj(world_seg.a, world_seg.b, test_seg_p2);
 
   // Set the epsilon for the similarity check
-	double epsilon = drone_seg.radius + world_seg.radius + 2*(2*opt_dx);
+	double epsilon = drone_seg.radius + world_seg.radius + 2*(2*diag_voxel);
 
 	if (((test_seg_proj_p1-test_seg_p1).norm() < epsilon) && 
 		((test_seg_proj_p2-test_seg_p2).norm() < epsilon) && 
