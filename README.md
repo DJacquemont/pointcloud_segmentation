@@ -10,7 +10,7 @@ The core of this project is to adapt and integrate the [`hough-3d-lines`](https:
 
 ### Prerequisites
 - Ubuntu 20.04
-- Webots 2023a
+- Webots 2023b
 - C++ Compiler with C++17 support
 - [auto_pilot](https://gitlab.epfl.ch/waelti/auto_pilot) package (drone and sensors simulation)
 - ROS Noetic
@@ -30,7 +30,7 @@ git submodule update --init --recursive
 #### Configuration file
 
 The YAML file `config.yaml` sets the nodes parameters:
-- vebose_level: NONE - 0, INFO - 1, DEBUG - 2
+- vebose_level: 0 (NONE), 1 (INFO), 2 (DEBUG)
 - path_to_output: path to the processed output data (segments and intersections)
 - floor_trim_height: cut off the pointcloud below this height
 - min_pca_coeff: minimum pca coeff to be considered as a line
@@ -39,7 +39,7 @@ The YAML file `config.yaml` sets the nodes parameters:
 - opt_minvotes: minimum number of votes to be considered a line
 - granularity: granularity of the search (Hough transform) between 0 and 6
 - opt_nlines: number of lines to be detected
-- radius_sizes: beam radius sizes
+- radius_size: beam radius size
 
 #### Simulation
 
@@ -48,11 +48,6 @@ First open your favorite simulation world on webots 2023.
 To launch all the packages in the simulation world `flying_arena_ros_tower.wbt`, with the waypoints `wp_tower.csv`
 ```bash
 roslaunch pointcloud_segmentation all.launch
-```
-
-To launch all the packages in the simulation world `flying_arena_ros_mockup.wbt`, with the waypoints `wp_mockup.csv`
-```bash
-roslaunch pointcloud_segmentation all.launch waypoints:=wp_mockup.csv
 ```
 
 To launch all the packages in the simulation world `flying_arena_ros_obs.wbt`
@@ -93,7 +88,10 @@ Three output csv files are created at the `path_to_output` path specified in the
 ### Pipeline Overview
 1. **Data Acquisition**: 3D point cloud data is captured by the ToF camera mounted on the MAV.
 2. **Pre-processing**: Raw data is filtered to remove noise and irrelevant information.
-3. **Segmentation**: The Hough-3D-Lines library processes the filtered data to identify and extract line segments.
-4. **Post-processing**: Extracted lines are analyzed to build a structural representation of the environment.
-5. **Visualization**: Real-time visualization of the segmented lines and structures is provided in RViz.
+3. **Iterative Hough Tranform**: The Hough-3D-Lines library processes the filtered data to identify and extract line segments.
+4. **Segments Sorting**: Segments are sorted to only keep relevent and meaningful segments
+5. **Segments Frame Conversion**: Segments are tranformed from the drone frame to world frame.
+6. **Segments Fusion**: New segments are fused with already existing segments.
+7. **Segments Intersection**: Intersection between segments are computed.
+8. **Data Visualization**: Real-time visualization of the segmented lines and structures is provided in RViz.
 
