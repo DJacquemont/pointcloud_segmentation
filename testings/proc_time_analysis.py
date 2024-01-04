@@ -30,14 +30,16 @@ def main():
     sns.set_context("talk")
 
     # Plotting the boxplot for processing time using Seaborn
-    plt.figure(figsize=(10, 8))
+    plt.figure(figsize=(12, 8))
     sns.boxplot(data=data['processing_time'])
-    plt.ylabel('Processing Time [s]', fontsize=20)
+    plt.ylabel('Processing Time [s]', fontsize=25)
+    plt.tick_params(labelsize=20)
 
-    plt.figure(figsize=(10, 8))
+    plt.figure(figsize=(12, 8))
     sns.boxplot(x='nblines', y='processing_time', data=data)
-    plt.xlabel('Number of Lines', fontsize=20)
-    plt.ylabel('Processing Time [s]', fontsize=20)
+    plt.xlabel('Number of Lines', fontsize=25)
+    plt.ylabel('Processing Time [s]', fontsize=25)
+    plt.tick_params(labelsize=20)
     # plt.title('Processing Time Distribution by Number of Lines', fontsize=22)
     plt.show()
 
