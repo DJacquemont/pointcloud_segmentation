@@ -24,3 +24,6 @@ install/
 
 # python
 __pycache__/
+
+# Other
+output_data/

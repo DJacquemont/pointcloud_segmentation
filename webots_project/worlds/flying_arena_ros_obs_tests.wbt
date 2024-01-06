@@ -1,0 +1,168 @@
+#VRML_SIM R2023b utf8
+
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023a/projects/objects/floors/protos/Floor.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023a/projects/appearances/protos/Parquetry.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023a/projects/appearances/protos/PaintedWood.proto"
+EXTERNPROTO "../protos/starling.proto"
+
+WorldInfo {
+  basicTimeStep 8
+}
+Viewpoint {
+  orientation -0.1530482163378443 -0.024628188891151682 0.9879117854281049 3.064337595824495
+  position 20.53823113650837 -2.582458700327841 5.238601789219942
+}
+Background {
+  skyColor [
+    0.533333 0.541176 0.521569
+  ]
+}
+Floor {
+  rotation 0 0 1 1.5707963267948966
+  size 6 6
+  appearance Parquetry {
+    type "light strip"
+  }
+}
+DEF CEILING Solid {
+  translation 3.53921e-16 0 6.89
+  rotation 0 -1 0 3.141592653589793
+  children [
+    Shape {
+      appearance PaintedWood {
+        colorOverride 0.560784 0.34902 0.00784314
+      }
+      geometry Plane {
+        size 6 6
+      }
+    }
+    PointLight {
+      attenuation 0 0 1
+      intensity 9
+      location -1.5 -1.5 0.3
+      castShadows TRUE
+    }
+    PointLight {
+      attenuation 0 0 1
+      intensity 9
+      location 1.5 1.5 0.3
+    }
+  ]
+}
+starling {
+  translation 1 7.433e-09 0.03706
+  rotation -2.1791679573264626e-09 -6.616165249167715e-09 1 3.140000091959759
+  controller "<extern>"
+}
+DEF SEG1 Solid {
+  translation 0.140955 0.444511 1.3316
+  rotation -0.11970795319198484 0.9793766170456991 -0.1627619363570842 3.04251
+  children [
+    DEF SHAPE_CYL Shape {
+      appearance PBRAppearance {
+        metalness 0
+      }
+      geometry Cylinder {
+        radius 0.05
+      }
+    }
+  ]
+  name "solid(5)"
+  boundingObject USE SHAPE_CYL
+}
+DEF SEG2 Solid {
+  translation 0.300618 -0.213726 1.33593
+  rotation 0.12940996646263506 -0.9659257496745788 -0.22414394191176013 3.14159
+  children [
+    DEF SHAPE_CYL Shape {
+      appearance PBRAppearance {
+        metalness 0
+      }
+      geometry Cylinder {
+        radius 0.05
+      }
+    }
+  ]
+  name "solid(1)"
+  boundingObject USE SHAPE_CYL
+}
+DEF SEG3 Solid {
+  translation 0.192667 -0.853663 1.41041
+  rotation 0.12507095630529586 -0.9915816535817087 0.03351238829213484 -3.074595307179586
+  children [
+    DEF SHAPE_CYL Shape {
+      appearance PBRAppearance {
+        metalness 0
+      }
+      geometry Cylinder {
+        radius 0.05
+      }
+    }
+  ]
+  name "solid(2)"
+  boundingObject USE SHAPE_CYL
+}
+DEF SEG4 Solid {
+  translation 0.271216 -0.103092 2.58827
+  rotation 0.030414214506646418 0.686090327244019 -0.7268803466996057 3.09612
+  children [
+    DEF SHAPE_CYL Shape {
+      appearance PBRAppearance {
+        metalness 0
+      }
+      geometry Cylinder {
+        radius 0.05
+      }
+    }
+  ]
+  name "solid(3)"
+  boundingObject USE SHAPE_CYL
+}
+DEF SEG5 Solid {
+  translation 0.0865667 0.899984 1.16655
+  rotation 0.0367934994702426 0.35562299487969573 -0.9339049865535194 3.12286
+  children [
+    DEF SHAPE_CYL Shape {
+      appearance PBRAppearance {
+        metalness 0
+      }
+      geometry Cylinder {
+        radius 0.05
+      }
+    }
+  ]
+  name "solid(4)"
+  boundingObject USE SHAPE_CYL
+}
+DEF SEG6 Solid {
+  translation -0.178779 -0.25669 1.20063
+  rotation -0.045615321329020145 0.8478743964529802 -0.5282312469927775 2.85945
+  children [
+    DEF SHAPE_CYL Shape {
+      appearance PBRAppearance {
+        metalness 0
+      }
+      geometry Cylinder {
+        radius 0.05
+      }
+    }
+  ]
+  name "solid(6)"
+  boundingObject USE SHAPE_CYL
+}
+DEF SEG7 Solid {
+  translation -0.105909 0.704094 2.24618
+  rotation 0.021813100871077736 -0.3748000149671498 0.9268490370125075 2.11988
+  children [
+    DEF SHAPE_CYL Shape {
+      appearance PBRAppearance {
+        metalness 0
+      }
+      geometry Cylinder {
+        radius 0.05
+      }
+    }
+  ]
+  name "solid(7)"
+  boundingObject USE SHAPE_CYL
+}

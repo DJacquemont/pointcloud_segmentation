@@ -1,0 +1,61 @@
+#VRML_SIM R2023a utf8
+PROTO vl53l1x
+
+[
+    field SFVec3f translation   0.0 0.0 0.0
+    field SFRotation rotation   0 1 0 0
+    field SFString name         "vl53l1x"
+]
+
+{
+DistanceSensor {
+  translation IS translation
+  rotation IS rotation
+  children [
+    DEF VL53L1X_SHAPE Shape {
+      appearance Appearance {
+        material Material {
+        }
+        texture ImageTexture {
+          url [
+            "./vl53l1x_assets/textures/sparkfun_texture.png"
+          ]
+        }
+      }
+      geometry Box {
+        size 0.001 0.0275 0.0275
+      }
+    }
+    Transform {
+      translation 0.001 0 0
+      children [
+        Shape {
+          appearance PBRAppearance {
+            baseColor 0 0 0
+            roughness 1
+            metalness 0
+          }
+          geometry Box {
+            size 0.002 0.003 0.005
+          }
+        }
+      ]
+    }
+  ]
+  name IS name 
+  boundingObject USE VL53L1X_SHAPE
+  physics Physics {
+    density -1
+    mass 0.002
+  }
+  lookupTable [
+    0.039 0 0
+    0.04 0.04 0.0125
+    4 4 0.00125
+    4.001 4 0
+  ]
+  type "laser"
+  aperture 0.01
+  resolution 0.001
+}
+}

@@ -2,7 +2,12 @@ cmake_minimum_required(VERSION 3.0.2)
 project(pointcloud_segmentation)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
-add_compile_options(-std=c++11)
+add_compile_options(-std=c++17)
+
+SET(Eigen3_DIR "/usr/lib/cmake/eigen3/") # or include /usr/include/eigen3/
+SET(PCL_DIR "/usr/lib/x86_64-linux-gnu/cmake/pcl/")
+INCLUDE_DIRECTORIES ( "${CMAKE_CURRENT_LIST_DIR}/libraries/hough-3d-lines" )
+INCLUDE_DIRECTORIES ( "${CMAKE_CURRENT_LIST_DIR}/include/pointcloud_segmentation" )
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -10,7 +15,13 @@ add_compile_options(-std=c++11)
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
+  tf
   std_msgs
+  sensor_msgs
+  geometry_msgs
+  visualization_msgs
+  Eigen3 REQUIRED
+  PCL REQUIRED
 )
 
 ## System dependencies are found with CMake's conventions
@@ -150,8 +161,18 @@ include_directories(
 #   ${catkin_LIBRARIES}
 # )
 
-add_executable(${PROJECT_NAME}_node src/pointcloud_segmentation_node.cpp)
+add_executable(${PROJECT_NAME}_node ${CMAKE_CURRENT_LIST_DIR}/src/pointcloud_segmentation_node.cpp 
+                                    ${CMAKE_CURRENT_LIST_DIR}/libraries/hough-3d-lines/vector3d.cpp 
+                                    ${CMAKE_CURRENT_LIST_DIR}/libraries/hough-3d-lines/pointcloud.cpp 
+                                    ${CMAKE_CURRENT_LIST_DIR}/libraries/hough-3d-lines/hough.cpp 
+                                    ${CMAKE_CURRENT_LIST_DIR}/libraries/hough-3d-lines/sphere.cpp)
+
 target_link_libraries(${PROJECT_NAME}_node
+  ${catkin_LIBRARIES}
+)
+
+add_executable(pointcloud_tfbr_node ${CMAKE_CURRENT_LIST_DIR}/src/pointcloud_tfbr.cpp)
+target_link_libraries(pointcloud_tfbr_node
   ${catkin_LIBRARIES}
 )
 

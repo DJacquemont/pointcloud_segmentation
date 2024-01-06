@@ -1,0 +1,76 @@
+#VRML_SIM R2023b utf8
+
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023a/projects/objects/floors/protos/Floor.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023a/projects/appearances/protos/Parquetry.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023a/projects/appearances/protos/PaintedWood.proto"
+EXTERNPROTO "../protos/starling.proto"
+
+WorldInfo {
+  basicTimeStep 8
+}
+Viewpoint {
+  orientation 0.3005988902165222 0.3917014378289739 -0.8696035250637557 1.82460985295818
+  position 1.3319207537062658 8.50651192825907 10.890129917754566
+}
+Background {
+  skyColor [
+    0.533333 0.541176 0.521569
+  ]
+}
+Floor {
+  rotation 0 0 1 1.5707963267948966
+  size 6 6
+  appearance Parquetry {
+    type "light strip"
+  }
+}
+DEF CEILING Solid {
+  translation 0 0 4
+  rotation 0 -1 0 3.141592653589793
+  children [
+    Shape {
+      appearance PaintedWood {
+        colorOverride 0.560784 0.34902 0.00784314
+      }
+      geometry Plane {
+        size 6 6
+      }
+    }
+    PointLight {
+      attenuation 0 0 1
+      intensity 9
+      location -1.5 -1.5 0.3
+      castShadows TRUE
+    }
+    PointLight {
+      attenuation 0 0 1
+      intensity 9
+      location 1.5 1.5 0.3
+    }
+  ]
+}
+starling {
+  translation 2.5 2 0.1
+  rotation -1.391033679971971e-16 -5.8324526587381756e-18 1 -3.11276210004695
+  controller "<extern>"
+}
+Solid {
+  translation -0.6 0.26 0.67
+  children [
+    Transform {
+      scale 0.001 0.001 0.001
+      children [
+        Shape {
+          appearance PBRAppearance {
+          }
+          geometry Mesh {
+            url [
+              "../protos/meshes/mockup_config_lin_1.stl"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+  name "solid(1)"
+}

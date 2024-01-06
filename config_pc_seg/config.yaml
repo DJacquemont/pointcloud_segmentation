@@ -1,0 +1,34 @@
+# vebose_level: NONE - 0, INFO - 1, DEBUG - 2
+verbose_level: 0
+
+# path_to_output: path to the processed output data (segments and intersections)
+path_to_output: /home/djacquem/WS/src/pointcloud_segmentation/output_data
+
+# floor_trim_height: cut off the pointcloud below this height
+floor_trim_height: 0.3
+
+# min_pca_coeff: minimum pca coeff to be considered as a line
+min_pca_coeff: 0.995
+
+# min_weight: minimum weight coefficient for the line’s fusion
+min_weight: 0.01
+
+# rad_2_leaf_ratio: ratio of radius to leaf size to determine leaf size
+rad_2_leaf_ratio: 1.5
+
+# opt_minvotes: minimum number of votes to be considered a line
+opt_minvotes: 12
+
+# granularity: granularity of the search (Hough transform) between 0 and 6
+granularity: 6
+
+# opt_nlines: number of lines to be detected
+opt_nlines: 10
+
+# radius_sizes: beam radius sizes
+radius_sizes:
+  # - 0.1
+  # - 0.25
+  # - 0.07
+  # - 0.05
+  - 0.05

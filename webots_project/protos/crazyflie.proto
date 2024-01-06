@@ -1,0 +1,286 @@
+#VRML_SIM R2023a utf8
+# This proto simulates the crazyflie drone
+#
+# 4 RotationalMotors:
+# - rotor1
+# - rotor2
+# - rotor3
+# - rotor4
+#
+# thrustConstants 4e-05 0
+# torqueConstants 2.4e-06 0
+#
+# For the crazyflie, the motors are placed as follows:
+# Motors: 1 FR - / 2 BR + / 3 BL - / 4 FL +
+#
+#     c_t, c_q, l = autopilot.c_t, autopilot.c_q, autopilot.l # simplify notation
+#     A:list = [
+#             [ c_t,      c_t,      c_t,      c_t     ],
+#             [-c_t * l, -c_t * l, +c_t * l, +c_t * l ],
+#             [ c_t * l, -c_t * l, -c_t * l,  c_t * l ],
+#             [-c_q,      c_q,     -c_q,      c_q     ]
+#         ]
+#     autopilot.set_allocation_matrix(A,[-1,1,-1,1])
+#
+# The PROTO uses an asset folder (./crazyflie_assets) to store its meshes and textures.
+#
+# The proto was created using assets from https://github.com/bitcraze/crazyflie-simulation
+PROTO crazyflie 
+
+[
+    field SFVec3f translation               0.0 0.0 0.0
+    field SFRotation rotation               0 1 0 0
+    field SFString name                     "crazyflie"
+    field SFString controller               "auto_pilot_demo"
+    field MFString controllerArgs           [ ]
+    field SFBool supervisor                 TRUE 
+    field SFFloat mass_body                 0.05
+    field MFNode extensions                 [ ]             # Connector to add components such as sensors 
+]
+
+{
+Robot {
+  translation IS translation
+  rotation IS rotation
+  children [
+    DEF Multiranger Transform {
+      translation 0 0 0.02
+      children [
+        DistanceSensor {
+          rotation 0 0 1 -1.57
+          name "range_right"
+          lookupTable [
+            0 0 0
+            2 2000 0
+          ]
+        }
+        DistanceSensor {
+          rotation 0 0 1 3.14
+          name "range_back"
+          lookupTable [
+            0 0 0
+            2 2000 0
+          ]
+        }
+        DistanceSensor {
+          rotation 0 0 1 1.57
+          name "range_left"
+          lookupTable [
+            0 0 0
+            2 2000 0
+          ]
+        }
+        DistanceSensor {
+          name "range_front"
+          lookupTable [
+            0 0 0
+            2 2000 0
+          ]
+        }
+      ]
+    }
+    Camera {
+      translation 0.03 0 0.01
+      fieldOfView 0.87
+      width 324
+      height 324
+    }
+    Solid {
+      translation 0 0 -0.015
+      children [
+        DEF battery Shape {
+          appearance PBRAppearance {
+            baseColor 0.5 0.5 0.6
+            metalness 0.1
+            emissiveIntensity 0
+          }
+          geometry Mesh {
+            url [
+              "./crazyflie_assets/meshes/battery.stl"
+            ]
+          }
+        }
+        DEF battery_holder Shape {
+          appearance PBRAppearance {
+            baseColor 0 0 0
+            metalness 0.2
+          }
+          geometry Mesh {
+            url [
+              "./crazyflie_assets/meshes/battery_holder.stl"
+            ]
+          }
+        }
+        DEF motors Shape {
+          appearance PBRAppearance {
+            baseColor 0.5 0.5 0.5
+            emissiveColor 0.4 0.4 0.4
+          }
+          geometry Mesh {
+            url [
+              "./crazyflie_assets/meshes/4_motors.stl"
+            ]
+          }
+        }
+        DEF motormounts Shape {
+          appearance PBRAppearance {
+            transparency 0.1
+            metalness 0.2
+            emissiveColor 0.5 0.5 0.5
+          }
+          geometry Mesh {
+            url [
+              "./crazyflie_assets/meshes/4_motormounts.stl"
+            ]
+          }
+        }
+        DEF pinheader Shape {
+          appearance DEF metal PBRAppearance {
+            baseColor 0.5 0.5 0.5
+            metalness 0.8
+            emissiveColor 0.4 0.4 0.4
+          }
+          geometry Mesh {
+            url [
+              "./crazyflie_assets/meshes/2_pinheaders.stl"
+            ]
+          }
+        }
+        DEF body Shape {
+          appearance DEF PCB PBRAppearance {
+            baseColor 0 0 0
+            roughness 0.3
+            metalness 0.5
+          }
+          geometry Mesh {
+            url [
+              "./crazyflie_assets/meshes/cf_body.stl"
+            ]
+          }
+        }
+      ]
+      name "body"
+    }
+    GPS {
+    }
+    Gyro {
+      name "gyroscope"
+    }
+    Accelerometer {
+    }
+    DEF m1 Propeller {
+      shaftAxis 0 0 1
+      centerOfThrust 0.031 -0.031 0.008
+      thrustConstants -4e-05 0
+      torqueConstants 2.4e-06 0
+      device RotationalMotor {
+        name "rotor1"
+        maxVelocity 600
+        maxTorque 30
+      }
+      slowHelix Solid {
+        translation 0.031 -0.031 0.008
+        children [
+          Shape {
+            appearance DEF plastic PBRAppearance {
+              baseColor 0 0 0
+              metalness 0.3
+            }
+            geometry Mesh {
+              url [
+                "./crazyflie_assets/meshes/ccw_prop.stl"
+              ]
+            }
+          }
+        ]
+      }
+    }
+    DEF m2 Propeller {
+      shaftAxis 0 0 1
+      centerOfThrust -0.031 -0.031 0.008
+      thrustConstants 4e-05 0
+      torqueConstants 2.4e-06 0
+      device RotationalMotor {
+        name "rotor2"
+        maxVelocity 600
+        maxTorque 30
+      }
+      slowHelix Solid {
+        translation -0.031 -0.031 0.008
+        children [
+          Shape {
+            appearance USE plastic
+            geometry Mesh {
+              url [
+                "./crazyflie_assets/meshes/cw_prop.stl"
+              ]
+            }
+          }
+        ]
+      }
+    }
+    DEF m3 Propeller {
+      shaftAxis 0 0 1
+      centerOfThrust -0.031 0.031 0.008
+      thrustConstants -4e-05 0
+      torqueConstants 2.4e-06 0
+      device RotationalMotor {
+        name "rotor3"
+        maxVelocity 600
+        maxTorque 30
+      }
+      slowHelix Solid {
+        translation -0.031 0.031 0.008
+        children [
+          Shape {
+            appearance USE plastic
+            geometry Mesh {
+              url [
+                "./crazyflie_assets/meshes/ccw_prop.stl"
+              ]
+            }
+          }
+        ]
+      }
+    }
+    DEF m4 Propeller {
+      shaftAxis 0 0 1
+      centerOfThrust 0.031 0.031 0.008
+      thrustConstants 4e-05 0
+      torqueConstants 2.4e-06 0
+      device RotationalMotor {
+        name "rotor4"
+        maxVelocity 600
+        maxTorque 30
+      }
+      slowHelix DEF prop Solid {
+        translation 0.031 0.031 0.008
+        children [
+          DEF prop Shape {
+            appearance USE plastic
+            geometry Mesh {
+              url [
+                "./crazyflie_assets/meshes/cw_prop.stl"
+              ]
+            }
+          }
+        ]
+      }
+    }
+    Group {
+      children IS extensions
+    }
+  ]
+  name IS name 
+  boundingObject Box {
+    size 0.08 0.08 0.03
+  }
+  physics Physics {
+    density -1
+    mass IS mass_body 
+  }
+  controller IS controller 
+  controllerArgs IS controllerArgs
+  supervisor IS supervisor
+}
+}

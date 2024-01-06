@@ -1,0 +1,601 @@
+#VRML_SIM R2023a utf8
+# This proto simulates the m500 development drone by ModalAI.
+#
+# 4 RotationalMotors:
+# - rotor1
+# - rotor2
+# - rotor3
+# - rotor4
+#
+# 1 Led (located on the flight core):
+# - led
+#
+# 4 Cameras:
+# - highRes
+# - stereoLeft
+# - stereoRight
+# - tracking
+#
+# 1 Lidar (emulating the two stereo cameras):
+# - lidar
+#
+# IMU 0
+# BLD orientation (FLU -> BLD: rot of pi around y-axis)
+# translation from center in FLU: 0.018 -0.015 0.023
+# - Accelerometer
+# ---- accelerometer0
+# - Gyroscope
+# ---- gyroscope0
+# IMU 1
+# RFU orientation (FLU -> RFU: rot of -pi/2 around z-axis)
+# translation from center in FLU: 0.068 0.015 0.025
+# - Accelerometer
+# ---- accelerometer1
+# - Gyroscope
+# ---- gyroscope1
+#
+# The PROTO uses an asset folder (./voxl_m500_assets) to store its meshes and textures.
+PROTO voxl_m500 
+
+[
+    field SFVec3f translation               0.0 0.02 0.0
+    field SFRotation rotation               0 1 0 0
+    field SFString name                     "voxl_m500"
+    field SFString controller               "auto_pilot_demo"
+    field MFString controllerArgs           [ ]
+    field SFBool supervisor                 TRUE 
+    field SFVec2f thrustConstants_1_2       0.0000103 0  
+    field SFVec2f thrustConstants_3_4       -0.0000103 0 
+    field SFVec2f torqueConstants           0.000000113 0 
+    field SFFloat mass_body                 1.37
+    field MFNode extensions                 [ ]             # Connector to add components such as sensors 
+]
+
+{
+Robot {
+  translation IS translation
+  rotation IS rotation 
+  children [
+    DEF MESH_flight_deck_transform Transform {
+      translation 0 0 -0.0125
+      rotation 0 0 1 3.14159
+      scale 0.001 0.001 0.001
+      children [
+        Shape {
+          appearance PBRAppearance {
+            baseColor 0.305882 0.603922 0.0235294
+            roughness 0.5
+            metalness 0
+          }
+          geometry Mesh {
+            url [
+              "./voxl_m500_assets/meshes/flight_deck.stl"
+            ]
+          }
+        }
+      ]
+    }
+    DEF MESH_holybro_frame_transform Transform {
+      translation 0 0 0.015
+      rotation 1 0 0 0
+      scale 0.001 0.001 0.001
+      children [
+        Shape {
+          appearance PBRAppearance {
+            baseColor 0.180392 0.203922 0.211765
+            roughness 1
+            metalness 0
+          }
+          geometry Mesh {
+            url [
+              "./voxl_m500_assets/meshes/holybro_frame.stl"
+            ]
+          }
+        }
+      ]
+    }
+    DEF BATTERY Transform {
+      translation -0.005 0 0
+      rotation 1 0 0 1.5707996938995747
+      children [
+        Shape {
+          appearance PBRAppearance {
+            baseColor 0.1 0.2 0.5
+            roughness 0.5
+            metalness 0
+          }
+          geometry Box {
+            size 0.13 0.025 0.04
+          }
+        }
+      ]
+    }
+    DEF VOXL_BOARD Transform {
+      translation 0.014 0 0.024
+      rotation 1 0 0 1.5707996938995747
+      children [
+        Shape {
+          appearance Appearance {
+            material Material {
+            }
+            texture ImageTexture {
+              url [
+                "./voxl_m500_assets/textures/voxl_flight.png"
+              ]
+            }
+          }
+          geometry Box {
+            size 0.114 0.001 0.037
+          }
+        }
+      ]
+    }
+    LED {
+      translation -0.041 0 0.025
+      children [
+        Group {
+          children [
+            Shape {
+              appearance PBRAppearance {
+                baseColor 0.74902 0.74902 0.74902
+                roughness 1
+                metalness 0
+              }
+              geometry Box {
+                size 0.001 0.002 0.001
+              }
+            }
+            PointLight {
+              attenuation 0 0 1
+              color 0 1 0
+              intensity 0.005
+              location 0 0 0.03
+              on FALSE
+              castShadows TRUE
+            }
+          ]
+        }
+      ]
+      color [
+        0 1 0
+        0 0 1
+      ]
+    }
+    DEF FLIGHT_DECK_SENSORS Group {
+      children [
+        DEF IMU0 Transform {
+          translation 0.0179999 -0.015 0.025
+          rotation 0 1 0 3.14159
+          children [
+            Shape {
+              appearance PBRAppearance {
+                baseColor 0 0 0
+                roughness 1
+                metalness 0
+              }
+              geometry Box {
+                size 0.003 0.003 0.001
+              }
+            }
+            Accelerometer {
+              name "accelerometer0"
+            }
+            Gyro {
+              name "gyroscope0"
+            }
+          ]
+        }
+        DEF IMU1 Transform {
+          translation 0.068 0.015 0.025
+          rotation 0 0 1 -1.5707996938995747
+          children [
+            Shape {
+              appearance PBRAppearance {
+                baseColor 0 0 0
+                roughness 1
+                metalness 0
+              }
+              geometry Box {
+                size 0.003 0.003 0.001
+              }
+            }
+            Accelerometer {
+              name "accelerometer1"
+            }
+            Gyro {
+              name "gyroscope1"
+            }
+          ]
+        }
+        Camera {
+          translation 0.083 0 0.0315
+          name "highRes"
+          fieldOfView 1.74
+          width 422
+          height 320
+          near 0.05
+        }
+        Camera {
+          translation 0.08 0.04 0.016
+          name "stereoRight"
+          fieldOfView 1.18
+          width 640
+          height 480
+          near 0.05
+        }
+        Camera {
+          translation 0.08 -0.04 0.016
+          name "stereoLeft"
+          fieldOfView 1.18
+          width 640
+          height 480
+          near 0.05
+        }
+        Camera {
+          translation 0.087 0 0.01
+          rotation 0 1 0 0.785398
+          name "tracking"
+          fieldOfView 2.32
+          width 640
+          height 480
+          near 0.05
+        }
+        Lidar {
+          translation 0.08 0 0.016
+          description "Emulates the result of the two stereo cameras."
+          horizontalResolution 64
+          fieldOfView 0.7
+          verticalFieldOfView 0.6
+          numberOfLayers 48
+          near 0.1
+          minRange 0.3
+          maxRange 10
+          noise 0.1
+          defaultFrequency 5
+          maxFrequency 7
+        }
+      ]
+    }
+    DEF PROP1 Propeller {
+      shaftAxis 0 0 1
+      centerOfThrust 0.167 -0.167 0.03
+      thrustConstants IS thrustConstants_1_2
+      torqueConstants IS torqueConstants
+      fastHelixThreshold 70
+      device RotationalMotor {
+        name "rotor1"
+        maxVelocity 1100
+        maxTorque 1000
+      }
+      fastHelix Solid {
+        translation 0.167 -0.167 0.065
+        children [
+          DEF FAST_PROP_SHAPE_1_2 Group {
+            children [
+              Transform {
+                translation 0 0 0.002
+                children [
+                  Shape {
+                    appearance PBRAppearance {
+                      baseColor 0.533333 0.541176 0.521569
+                      baseColorMap ImageTexture {
+                        url [
+                          "./voxl_m500_assets/textures/fast_helix.png"
+                        ]
+                      }
+                      metalness 0
+                    }
+                    geometry Cylinder {
+                      height 0.001
+                      radius 0.125
+                    }
+                  }
+                ]
+              }
+              Transform {
+                translation 0 0 -0.005
+                scale 0.001 0.001 0.001
+                children [
+                  Shape {
+                    appearance Appearance {
+                      material Material {
+                        diffuseColor 0.533333 0.541176 0.521569
+                      }
+                      textureTransform TextureTransform {
+                        scale 0.05 0.05
+                      }
+                    }
+                    geometry Mesh {
+                      url [
+                        "./voxl_m500_assets/meshes/holybro_propeller_knob.stl"
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+        name "fastProp1"
+        boundingObject DEF SPINNING_PROP_BOUND Cylinder {
+          height 0.01
+          radius 0.125
+          subdivision 20
+        }
+        physics DEF PROP_PHYSICS Physics {
+          density -1
+          mass 0.01
+          centerOfMass [
+            0 0 0
+          ]
+        }
+      }
+      slowHelix Solid {
+        translation 0.167 -0.167 0.06
+        rotation 1 0 0 1.5707996938995747
+        children [
+          Transform {
+            translation 0 0 -0.05
+            rotation 1 0 0 -1.5707953071795862
+            scale 0.001 0.001 0.001
+            children [
+              DEF PROP_RIGHT_SHAPE Shape {
+                appearance PBRAppearance {
+                  baseColor 0.533333 0.541176 0.521569
+                  roughness 1
+                  metalness 0
+                }
+                geometry Mesh {
+                  url [
+                    "./voxl_m500_assets/meshes/holybro_propeller_right.stl"
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+        name "slowProp1"
+        boundingObject Transform {
+          translation 0 0.005 0
+          children [
+            DEF PROP_COLLISION_SHAPE Box {
+              size 0.25 0.01 0.04
+            }
+          ]
+        }
+        physics USE PROP_PHYSICS
+      }
+    }
+    DEF PROP2 Propeller {
+      shaftAxis 0 0 1
+      centerOfThrust -0.167 0.167 0.03
+      thrustConstants IS thrustConstants_1_2
+      torqueConstants IS torqueConstants
+      fastHelixThreshold 70
+      device RotationalMotor {
+        name "rotor2"
+        maxVelocity 1100
+        maxTorque 1000
+      }
+      fastHelix Solid {
+        translation -0.167 0.167 0.065
+        children [
+          USE FAST_PROP_SHAPE_1_2
+        ]
+        name "fastProp2"
+        boundingObject USE SPINNING_PROP_BOUND
+        physics USE PROP_PHYSICS
+      }
+      slowHelix Solid {
+        translation -0.167 0.167 0.06
+        rotation 1 0 0 1.5707996938995747
+        children [
+          Transform {
+            translation 0 0 -0.05
+            rotation 1 0 0 -1.5708003061004252
+            scale 0.001 0.001 0.001
+            children [
+              USE PROP_RIGHT_SHAPE
+            ]
+          }
+        ]
+        name "slowProp2"
+        boundingObject Transform {
+          translation 0 0.005 0
+          children [
+            USE PROP_COLLISION_SHAPE
+          ]
+        }
+        physics USE PROP_PHYSICS
+      }
+    }
+    DEF PROP3 Propeller {
+      shaftAxis 0 0 1
+      centerOfThrust 0.167 0.167 0.03
+      thrustConstants IS thrustConstants_3_4
+      torqueConstants IS torqueConstants
+      fastHelixThreshold 70
+      device RotationalMotor {
+        name "rotor3"
+        maxVelocity 1100
+        maxTorque 1000
+      }
+      fastHelix Solid {
+        translation 0.167 0.167 0.065
+        children [
+          DEF FAST_PROP_SHAPE_3_4 Group {
+            children [
+              Transform {
+                translation 0 0 0.002
+                children [
+                  Shape {
+                    appearance PBRAppearance {
+                      baseColor 0.180392 0.203922 0.211765
+                      baseColorMap ImageTexture {
+                        url [
+                          "./voxl_m500_assets/textures/fast_helix.png"
+                        ]
+                      }
+                      metalness 0
+                    }
+                    geometry Cylinder {
+                      height 0.001
+                      radius 0.125
+                    }
+                  }
+                ]
+              }
+              Transform {
+                translation 0 0 -0.005
+                scale 0.001 0.001 0.001
+                children [
+                  Shape {
+                    appearance Appearance {
+                      material Material {
+                        diffuseColor 0.180392 0.203922 0.211765
+                      }
+                      textureTransform TextureTransform {
+                        scale 0.05 0.05
+                      }
+                    }
+                    geometry Mesh {
+                      url [
+                        "./voxl_m500_assets/meshes/holybro_propeller_knob.stl"
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+        name "fastProp3"
+        boundingObject USE SPINNING_PROP_BOUND
+        physics USE PROP_PHYSICS
+      }
+      slowHelix Solid {
+        translation 0.167 0.167 0.06
+        rotation 1 0 0 1.5707996938995747
+        children [
+          Transform {
+            rotation 1 0 0 -1.5707953071795862
+            scale 0.001 0.001 0.001
+            children [
+              DEF PROP_LEFT_SHAPE Shape {
+                appearance PBRAppearance {
+                  baseColor 0.180392 0.203922 0.211765
+                  roughness 1
+                  metalness 0
+                }
+                geometry Mesh {
+                  url [
+                    "./voxl_m500_assets/meshes/holybro_propeller_left.stl"
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+        name "slowProp3"
+        boundingObject Transform {
+          translation 0 0.005 0
+          children [
+            USE PROP_COLLISION_SHAPE
+          ]
+        }
+        physics USE PROP_PHYSICS
+      }
+    }
+    DEF PROP4 Propeller {
+      shaftAxis 0 0 1
+      centerOfThrust -0.167 -0.167 0.03
+      thrustConstants IS thrustConstants_3_4
+      torqueConstants IS torqueConstants
+      fastHelixThreshold 70
+      device RotationalMotor {
+        name "rotor4"
+        maxVelocity 1100
+        maxTorque 1000
+      }
+      fastHelix Solid {
+        translation -0.167 -0.167 0.065
+        children [
+          USE FAST_PROP_SHAPE_3_4
+        ]
+        name "fastProp4"
+        boundingObject USE SPINNING_PROP_BOUND
+        physics USE PROP_PHYSICS
+      }
+      slowHelix Solid {
+        translation -0.167 -0.167 0.06
+        rotation 1 0 0 1.5707996938995747
+        children [
+          Transform {
+            rotation 1 0 0 -1.5707996938995747
+            scale 0.001 0.001 0.001
+            children [
+              USE PROP_LEFT_SHAPE
+            ]
+          }
+        ]
+        name "slowProp4"
+        boundingObject Transform {
+          translation 0 0.005 0
+          children [
+            USE PROP_COLLISION_SHAPE
+          ]
+        }
+        physics USE PROP_PHYSICS
+      }
+    }
+    Group {
+      children IS extensions
+    }
+  ]
+  name IS name 
+  boundingObject Group {
+    children [
+      Transform {
+        translation 0 0 0.01
+        children [
+          Box {
+            size 0.17 0.11 0.05
+          }
+        ]
+      }
+      Transform {
+        translation 0 0 0.02
+        rotation 0 0 1 -0.7853996938995746
+        children [
+          Box {
+            size 0.52 0.03 0.01
+          }
+        ]
+      }
+      Transform {
+        translation 0 0 0.02
+        rotation 0 0 1 0.7853996938995746
+        children [
+          Box {
+            size 0.52 0.03 0.01
+          }
+        ]
+      }
+    ]
+  }
+  physics Physics {
+    density -1
+    mass IS mass_body
+    centerOfMass [
+      0 0 0
+    ]
+    inertiaMatrix [
+      0.004885394057561733 0.010248383333333336 0.006194372609104936
+      0 0 0
+    ]
+  }
+  controller IS controller
+  controllerArgs IS controllerArgs
+  supervisor IS supervisor
+}
+}

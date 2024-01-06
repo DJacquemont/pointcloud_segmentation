@@ -1,0 +1,209 @@
+#VRML_SIM R2023b utf8
+
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023a/projects/objects/floors/protos/Floor.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023a/projects/appearances/protos/Parquetry.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023a/projects/appearances/protos/PaintedWood.proto"
+EXTERNPROTO "../protos/starling.proto"
+
+WorldInfo {
+  basicTimeStep 8
+}
+Viewpoint {
+  orientation -0.3819592510969585 0.3318345228968679 0.8625502767463811 1.6857010640787404
+  position -0.34213859754069104 -10.775031879459009 9.551461427631653
+}
+Background {
+  skyColor [
+    0.533333 0.541176 0.521569
+  ]
+}
+Floor {
+  rotation 0 0 1 1.5707963267948966
+  size 6 6
+  appearance Parquetry {
+    type "light strip"
+  }
+}
+DEF CEILING Solid {
+  translation 3.53921e-16 0 6.89
+  rotation 0 -1 0 3.141592653589793
+  children [
+    Shape {
+      appearance PaintedWood {
+        colorOverride 0.560784 0.34902 0.00784314
+      }
+      geometry Plane {
+        size 6 6
+      }
+    }
+    PointLight {
+      attenuation 0 0 1
+      intensity 9
+      location -1.5 -1.5 0.3
+      castShadows TRUE
+    }
+    PointLight {
+      attenuation 0 0 1
+      intensity 9
+      location 1.5 1.5 0.3
+    }
+  ]
+}
+starling {
+  translation 1.431721352962448 0.04593398196138978 -2.8939500000116358e-05
+  rotation -1.391033679971971e-16 -5.8324526587381756e-18 1 -3.11276210004695
+  controller "<extern>"
+}
+Solid {
+  translation 2.77288 0.78632 1.49542
+  rotation 0.9373915650805004 0.04546587890529631 0.3452968397933859 0.761398
+  children [
+    DEF SHAPE_CYL Shape {
+      appearance PBRAppearance {
+        metalness 0
+      }
+      geometry Cylinder {
+        radius 0.1
+      }
+    }
+  ]
+  name "solid(1)"
+  boundingObject USE SHAPE_CYL
+}
+Solid {
+  translation 2.75375 0.89336 1.52202
+  rotation 0.7823670356685052 0.2383310108656302 -0.5754130262333681 -0.4186153071795866
+  children [
+    DEF SHAPE_CYL Shape {
+      appearance PBRAppearance {
+        metalness 0
+      }
+      geometry Cylinder {
+        radius 0.1
+      }
+    }
+  ]
+  name "solid(2)"
+  boundingObject USE SHAPE_CYL
+}
+Solid {
+  translation -2.45592 -0.45415 1.2094
+  rotation 0.7823670356685052 0.2383310108656302 -0.5754130262333681 -0.4186153071795866
+  children [
+    DEF SHAPE_CYL Shape {
+      appearance PBRAppearance {
+        metalness 0
+      }
+      geometry Cylinder {
+        radius 0.1
+      }
+    }
+  ]
+  name "solid(3)"
+  boundingObject USE SHAPE_CYL
+}
+Solid {
+  translation -2.189 0.93272 1.30273
+  rotation 0.596377737329658 -0.10475895385966225 0.7958386494785148 0.32385
+  children [
+    DEF SHAPE_CYL Shape {
+      appearance PBRAppearance {
+        metalness 0
+      }
+      geometry Cylinder {
+        radius 0.1
+      }
+    }
+  ]
+  name "solid(6)"
+  boundingObject USE SHAPE_CYL
+}
+Solid {
+  translation -0.971105 2.09014 1.54241
+  rotation 0.596377737329658 -0.10475895385966225 0.7958386494785148 0.32385
+  children [
+    DEF SHAPE_CYL Shape {
+      appearance PBRAppearance {
+        metalness 0
+      }
+      geometry Cylinder {
+        radius 0.1
+      }
+    }
+  ]
+  name "solid(8)"
+  boundingObject USE SHAPE_CYL
+}
+Solid {
+  translation 1.15464 1.83805 1.51149
+  rotation 0.596377737329658 -0.10475895385966225 0.7958386494785148 0.32385
+  children [
+    DEF SHAPE_CYL Shape {
+      appearance PBRAppearance {
+        metalness 0
+      }
+      geometry Cylinder {
+        radius 0.1
+      }
+    }
+  ]
+  name "solid(9)"
+  boundingObject USE SHAPE_CYL
+}
+Solid {
+  translation -1.52756 -2.84853 1.11555
+  rotation -0.5081508748422008 0.8521297901200324 0.1251299691804298 0.791712
+  children [
+    DEF SHAPE_CYL Shape {
+      appearance PBRAppearance {
+        metalness 0
+      }
+      geometry Cylinder {
+        radius 0.1
+      }
+    }
+  ]
+  name "solid(4)"
+  boundingObject USE SHAPE_CYL
+}
+Solid {
+  translation -0.0203899 -1.82842 2.92987
+  rotation -0.5081508748422008 0.8521297901200324 0.1251299691804298 0.791712
+  children [
+    DEF SHAPE_CYL Shape {
+      appearance PBRAppearance {
+        metalness 0
+      }
+      geometry Cylinder {
+        radius 0.1
+      }
+    }
+  ]
+  name "solid(10)"
+  boundingObject USE SHAPE_CYL
+}
+Solid {
+  translation 2.03084 -1.93608 1.63957
+  rotation -0.16522405819258446 0.97735434422817 -0.13221004656491542 2.5301
+  children [
+    DEF SHAPE_CYL Shape {
+      appearance PBRAppearance {
+        metalness 0
+      }
+      geometry Cylinder {
+        radius 0.1
+      }
+    }
+  ]
+  name "solid(5)"
+  boundingObject USE SHAPE_CYL
+}
+Solid {
+  translation -0.619799 1.9117 1.48107
+  rotation 0.44078619725885604 0.8971194014752457 0.029737313307922165 -1.7407453071795862
+  children [
+    USE SHAPE_CYL
+  ]
+  name "solid(7)"
+  boundingObject USE SHAPE_CYL
+}
