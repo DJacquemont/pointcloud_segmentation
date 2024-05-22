@@ -1,5 +1,9 @@
 # Point Cloud Segmentation of Infrastructural Steel Elements
 
+<p align="center">
+  <img src="doc/images/demo.gif" width="50%">
+</p>
+
 ## Overview
 
 This project focuses on developing a real-time ROS segmentation pipeline. The project utilizes a Time of Flight (ToF) camera mounted on a Micro Aerial Vehicle (MAV) to generate 3D point-cloud data, which is then processed to extract 3D structures.
